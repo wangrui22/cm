@@ -1,0 +1,70 @@
+00000001: <Info> {0x00007f170ddf77c0} (2018:12:24-19:17:15:948) [AISERVER] hello AI server. (2018:12:24-19:17:15:948999)
+00000002: <Info> {0x00007f170ddf77c0} (2018:12:24-19:17:15:948) [UTIL] creating a new b-pipe worker container.
+00000003: <Debug> {0x00007f170ddf77c0} (2018:12:24-19:17:15:948) [UTIL] creating a new b-pipe worker {aiworker} success. pid: 3546
+00000004: <Info> {0x00007f170ddf77c0} (2018:12:24-19:17:15:948) [UTIL] worker pool: aiworker add worker: 1 success.
+00000005: <Info> {0x00007f170ddf77c0} (2018:12:24-19:17:15:948) [UTIL] process pool add worker success.
+00000007: <Info> {0x00007f170ddf77c0} (2018:12:24-19:17:16:389) [UTIL] server {INET:8876} accept client socket address: 127.0.0.1:45188
+00000008: <Info> {0x00007f1708c41700} (2018:12:24-19:18:09:936) [UTIL] client inet socket address:127.0.0.1:45188 disconnect. socket: 7
+00000009: <Debug> {0x00007f1708c41700} (2018:12:24-19:18:09:936) [UTIL] try remove socket id: 2
+0000000a: <Debug> {0x00007f1708c41700} (2018:12:24-19:18:09:936) [UTIL] remove socket id: 2, socket: 7
+0000000b: <Debug> {0x00007f1708c41700} (2018:12:24-19:18:09:936) [UTIL] try clear client: 2's package.
+0000000c: <Debug> {0x00007f1708c41700} (2018:12:24-19:18:09:936) [UTIL] package store size tmp: 0
+0000000d: <Info> {0x00007f1708c41700} (2018:12:24-19:18:09:936) [UTIL] clear client: 2's package success.
+0000000e: <Info> {0x00007f170ddf77c0} (2018:12:24-19:18:11:695) [UTIL] server {INET:8876} accept client socket address: 127.0.0.1:52870
+00000014: <Info> {0x00007f170743e700} (2018:12:24-19:18:29:904) [UTIL] acquire workder: /home/wangrui22/projects/stmed/med_app/bin/aiworker
+00000015: <Info> {0x00007f170743e700} (2018:12:24-19:18:29:904) [AISERVER] ai runner run worker pid: 3546
+00000016: <Info> {0x00007f1706c3d700} (2018:12:24-19:18:29:904) [UTIL] creating a new b-pipe worker container.
+00000017: <Debug> {0x00007f170743e700} (2018:12:24-19:18:29:904) [AISERVER] ai runner write to worker: 3546done. wait its respond.
+00000018: <Debug> {0x00007f1706c3d700} (2018:12:24-19:18:29:904) [UTIL] creating a new b-pipe worker {aiworker} success. pid: 3758
+00000019: <Info> {0x00007f1706c3d700} (2018:12:24-19:18:29:904) [UTIL] worker pool: aiworker add worker: 1 success.
+0000001a: <Info> {0x00007f170743e700} (2018:12:24-19:18:34:909) [AISERVER] worker pid: 3546 not ready to read.
+0000001b: <Info> {0x00007f170743e700} (2018:12:24-19:18:39:915) [AISERVER] worker pid: 3546 not ready to read.
+0000001c: <Info> {0x00007f170743e700} (2018:12:24-19:18:44:919) [AISERVER] worker pid: 3546 not ready to read.
+0000001d: <Info> {0x00007f170743e700} (2018:12:24-19:18:49:924) [AISERVER] worker pid: 3546 not ready to read.
+0000001e: <Info> {0x00007f170743e700} (2018:12:24-19:18:54:927) [AISERVER] worker pid: 3546 not ready to read.
+0000001f: <Info> {0x00007f170743e700} (2018:12:24-19:18:59:931) [AISERVER] worker pid: 3546 not ready to read.
+00000020: <Info> {0x00007f170743e700} (2018:12:24-19:19:04:935) [AISERVER] worker pid: 3546 not ready to read.
+00000021: <Info> {0x00007f170743e700} (2018:12:24-19:19:09:939) [AISERVER] worker pid: 3546 not ready to read.
+00000022: <Info> {0x00007f170743e700} (2018:12:24-19:19:14:944) [AISERVER] worker pid: 3546 not ready to read.
+00000023: <Info> {0x00007f170743e700} (2018:12:24-19:19:19:950) [AISERVER] worker pid: 3546 not ready to read.
+00000024: <Info> {0x00007f170743e700} (2018:12:24-19:19:24:951) [AISERVER] worker pid: 3546 not ready to read.
+00000025: <Info> {0x00007f170743e700} (2018:12:24-19:19:29:956) [AISERVER] worker pid: 3546 not ready to read.
+00000026: <Info> {0x00007f170743e700} (2018:12:24-19:19:34:961) [AISERVER] worker pid: 3546 not ready to read.
+00000027: <Info> {0x00007f170743e700} (2018:12:24-19:19:39:963) [AISERVER] worker pid: 3546 not ready to read.
+00000028: <Info> {0x00007f170743e700} (2018:12:24-19:19:44:969) [AISERVER] worker pid: 3546 not ready to read.
+00000029: <Info> {0x00007f170743e700} (2018:12:24-19:19:49:971) [AISERVER] worker pid: 3546 not ready to read.
+0000002a: <Info> {0x00007f170743e700} (2018:12:24-19:19:54:976) [AISERVER] worker pid: 3546 not ready to read.
+0000002b: <Info> {0x00007f170743e700} (2018:12:24-19:19:59:979) [AISERVER] worker pid: 3546 not ready to read.
+0000002c: <Info> {0x00007f170743e700} (2018:12:24-19:20:04:984) [AISERVER] worker pid: 3546 not ready to read.
+0000002d: <Info> {0x00007f170743e700} (2018:12:24-19:20:09:987) [AISERVER] worker pid: 3546 not ready to read.
+0000002e: <Info> {0x00007f170743e700} (2018:12:24-19:20:14:991) [AISERVER] worker pid: 3546 not ready to read.
+0000002f: <Info> {0x00007f170743e700} (2018:12:24-19:20:19:996) [AISERVER] worker pid: 3546 not ready to read.
+00000030: <Info> {0x00007f170743e700} (2018:12:24-19:20:25:0) [AISERVER] worker pid: 3546 not ready to read.
+00000031: <Info> {0x00007f170743e700} (2018:12:24-19:20:30:3) [AISERVER] worker pid: 3546 not ready to read.
+00000032: <Info> {0x00007f170743e700} (2018:12:24-19:20:35:7) [AISERVER] worker pid: 3546 not ready to read.
+00000033: <Info> {0x00007f170743e700} (2018:12:24-19:20:40:11) [AISERVER] worker pid: 3546 not ready to read.
+00000034: <Info> {0x00007f170743e700} (2018:12:24-19:20:45:15) [AISERVER] worker pid: 3546 not ready to read.
+00000035: <Info> {0x00007f170743e700} (2018:12:24-19:20:50:19) [AISERVER] worker pid: 3546 not ready to read.
+00000036: <Info> {0x00007f170743e700} (2018:12:24-19:20:54:964) [AISERVER] ai runner read respond from worker pid: 3546 begin.
+00000037: <Info> {0x00007f170743e700} (2018:12:24-19:20:54:964) [AISERVER] ai runner read from worker pid: 3546 done.
+00000038: <Debug> {0x00007f170743e700} (2018:12:24-19:20:54:965) [IO] read config file: ../../med_config/config/ais_config
+00000039: <Debug> {0x00007f170743e700} (2018:12:24-19:20:54:965) [IO] read config file: ../../med_config/config/ais_config
+0000003a: <Info> {0x00007f170743e700} (2018:12:24-19:20:54:965) [PERFORMACE] body part locate success. series: 1.2.840.113704.7.32.0619.2.55.3.2831158023.5533.1503528841.438.4. cost 145.061 s
+00000041: <Info> {0x00007f170743e700} (2018:12:24-19:20:55:12) [UTIL] acquire workder: /home/wangrui22/projects/stmed/med_app/bin/aiworker
+00000042: <Info> {0x00007f170743e700} (2018:12:24-19:20:55:13) [AISERVER] ai runner run worker pid: 3758
+00000043: <Debug> {0x00007f170743e700} (2018:12:24-19:20:55:13) [AISERVER] ai runner write to worker: 3758done. wait its respond.
+00000044: <Info> {0x00007f1706c3d700} (2018:12:24-19:20:55:13) [UTIL] creating a new b-pipe worker container.
+00000045: <Debug> {0x00007f1706c3d700} (2018:12:24-19:20:55:13) [UTIL] creating a new b-pipe worker {aiworker} success. pid: 4330
+00000046: <Info> {0x00007f1706c3d700} (2018:12:24-19:20:55:14) [UTIL] worker pool: aiworker add worker: 1 success.
+0000004b: <Info> {0x00007f170743e700} (2018:12:24-19:21:00:15) [AISERVER] worker pid: 3758 not ready to read.
+0000004c: <Info> {0x00007f170743e700} (2018:12:24-19:21:00:575) [AISERVER] ai runner read respond from worker pid: 3758 begin.
+0000004d: <Info> {0x00007f170743e700} (2018:12:24-19:21:00:575) [AISERVER] ai runner read from worker pid: 3758 done.
+0000004e: <Debug> {0x00007f170743e700} (2018:12:24-19:21:00:575) [IO] read config file: ../../med_config/config/ais_config
+0000004f: <Debug> {0x00007f170743e700} (2018:12:24-19:21:00:575) [IO] read config file: ../../med_config/config/ais_config
+00000050: <Info> {0x00007f170743e700} (2018:12:24-19:21:00:575) [PERFORMACE] whole body segment success. series: 1.2.840.113704.7.32.0619.2.55.3.2831158023.5533.1503528841.438.4. cost 5.56303 s
+00000053: <Info> {0x00007f170743e700} (2018:12:24-19:21:00:576) [UTIL] acquire workder: /home/wangrui22/projects/stmed/med_app/bin/aiworker
+00000054: <Info> {0x00007f170743e700} (2018:12:24-19:21:00:576) [AISERVER] ai runner run worker pid: 4330
+00000055: <Debug> {0x00007f170743e700} (2018:12:24-19:21:00:576) [AISERVER] ai runner write to worker: 4330done. wait its respond.
+00000056: <Info> {0x00007f1706c3d700} (2018:12:24-19:21:00:576) [UTIL] creating a new b-pipe worker container.
+00000057: <Debug> {0x00007f1706c3d700} (2018:12:24-19:21:00:576) [UTIL] creating a new b-pipe worker {aiworker} success. pid: 5549
+00000058: <Info> {0x00007f1706c3d700} (2018:12:24-19:21:00:576) [UTIL] worker pool: aiworker add worker: 1 success.
