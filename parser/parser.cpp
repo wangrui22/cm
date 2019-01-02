@@ -188,6 +188,10 @@ static inline Token lex_identifier(char c, Reader* cpp_reader, Token& token,  in
     return lex_identifier(cpp_reader->next_char(), cpp_reader, token, next_status);
 }
 
+static inline Token lex_comment(char c, Reader* cpp_reader, Token& token, int per_status) {
+    //TODO
+}
+
 Parser::Parser() {
 
 }
@@ -328,21 +332,64 @@ Token Parser::lex(Reader* cpp_reader) {
                 return lex_number(c, cpp_reader, t, 0);
             }
 
-            //作为运算符
+            char nc = cpp_reader->next_char();
+            if (nc == '=') {
+                return {CPP_PLUS_EQ, "+=", cpp_reader->get_cur_loc()-1};
+            } else if (nc == '+') {
+                return {CPP_PLUS_PLUS, "++", cpp_reader->get_cur_loc()-1};
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_PLUS, "+", cpp_reader->get_cur_loc()};
+            }
 
-            //加号
+            //错误
             return {CPP_OTHER, "", 0};
         }
         case '.': 
         {
             char nc = cpp_reader->next_char();
-            cpp_reader->pre_char();
             if (is_num(nc)) {
+                cpp_reader->pre_char();
                 Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
                 return lex_number(c, cpp_reader, t, 2);
+            } else if (nc == '.') {
+                char nnc = cpp_reader->next_char();
+                if (nnc == '.') {
+                    return {CPP_ELLIPSIS, "...", cpp_reader->get_cur_loc()-2};
+                } else {
+                    return {CPP_OTHER, "", 0};
+                }
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_DOT, ".", cpp_reader->get_cur_loc()};
             }
-
-            //作为function call
+        }
+        case '*':
+        {
+            //TODO 怎么判断是解引用还是乘号
+            return {CPP_MULT, "*", cpp_reader->get_cur_loc()};
+        }
+        case '/':
+        {
+            char nc = cpp_reader->next_char();
+            if (nc == '=') {
+                return {CPP_DIV_EQ, "/=", cpp_reader->get_cur_loc()};
+            } else if (nc == '/') {
+                //TODO
+                //注释
+                Token t = {CPP_COMMENT, "//", cpp_reader->get_cur_loc()-1};
+                while(true) {
+                    nc = cpp_reader->next_char();
+                    if (nc == '/n' || cpp_reader->eof()) {
+                        return t;
+                    } else {
+                        t.val += nc;
+                    }
+                }
+            } else if (nc == '*') {
+                //TODO
+                //注释
+            }
 
         }
         default:

@@ -52,7 +52,7 @@ enum TokenType {
     CPP_OPEN_BRACE,  // {
     CPP_CLOSE_BRACE, // }
     CPP_SEMICOLON,  // ;
-    CPP_ELLIPSIS, // 省略符号 .
+    CPP_ELLIPSIS, // 省略符号 ...
     CPP_PLUS_PLUS, // ++
     CPP_MINUS_MINUS, // --
     CPP_DEREF, // 解引用 *
