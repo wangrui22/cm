@@ -221,6 +221,34 @@ static inline Token lex_comment(char c, Reader* cpp_reader, Token& token, int pe
     }
 }
 
+static inline Token lex_string(char c , Reader* cpp_reader, Token& token, int per_status) {
+    //-------------------DFA-----------------//
+    //       | 0 | 1 | 2 
+    //  "    | 1 | 2 | 
+    // other |-1 | 1 | 
+    const static char DFA[2][3] = {
+        1,2,-1,
+        -1,1,-1
+    };
+    //-------------------DFA-----------------//
+
+    int input = -1;
+    if (c == '\"') {
+        input = 0;
+    } else {
+        input = 1;
+    }
+
+    token.val += c;
+
+    int next_status = DFA[input][per_status];
+    if (next_status == 2) {
+        return token;
+    } else {
+        return lex_string(cpp_reader->next_char(), cpp_reader, token, next_status);
+    }
+}
+
 Parser::Parser() {
 
 }
@@ -238,6 +266,9 @@ Token Parser::lex(Reader* cpp_reader) {
     switch(c) {
         case '\n': {
             return lex(cpp_reader);
+        }
+        case ';': {
+            return {CPP_SEMICOLON, ";", cpp_reader->get_cur_loc()};
         }
         //brace
         case ' ': case '\t': case '\f': case '\v': case '\0':
@@ -315,6 +346,27 @@ Token Parser::lex(Reader* cpp_reader) {
             return lex_number(c, cpp_reader, t, 2);
         }
 
+        //char
+        case '\'': 
+        {
+            char nc = cpp_reader->next_char();
+            char nnc = cpp_reader->next_char();
+            if (nnc == '\'' && nc != '\'') {
+                return {CPP_CHAR, "\'" + std::string(1,nc) + "\'", cpp_reader->get_cur_loc()-2};
+            }
+
+            cpp_reader->pre_char();
+            cpp_reader->pre_char();
+            return {CPP_OTHER, "", 0};
+        }
+
+        //string
+        case '\"': 
+        {
+            Token t = {CPP_STRING, "\"", cpp_reader->get_cur_loc()};
+            return lex_string(cpp_reader->next_char(), cpp_reader, t, 1);
+        }
+
         case '-':
         {
             Token t = cpp_reader->get_last_token();
@@ -345,6 +397,7 @@ Token Parser::lex(Reader* cpp_reader) {
                 return {CPP_MINUS, "-", cpp_reader->get_cur_loc()};
             }
             //错误
+            cpp_reader->pre_char();
             return {CPP_OTHER, "", 0};
         }
         case '+':
@@ -375,6 +428,7 @@ Token Parser::lex(Reader* cpp_reader) {
             }
 
             //错误
+            cpp_reader->pre_char();
             return {CPP_OTHER, "", 0};
         }
         case '.': 
@@ -389,6 +443,7 @@ Token Parser::lex(Reader* cpp_reader) {
                 if (nnc == '.') {
                     return {CPP_ELLIPSIS, "...", cpp_reader->get_cur_loc()-2};
                 } else {
+                    cpp_reader->pre_char();
                     return {CPP_OTHER, "", 0};
                 }
             } else {
@@ -399,7 +454,13 @@ Token Parser::lex(Reader* cpp_reader) {
         case '*':
         {
             //TODO 怎么判断是解引用还是乘号
-            return {CPP_MULT, "*", cpp_reader->get_cur_loc()};
+            char nc = cpp_reader->next_char();
+            if (nc == '=') {
+                return {CPP_MULT_EQ, "*=", cpp_reader->get_cur_loc()-1};
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_MULT, "*", cpp_reader->get_cur_loc()};
+            }
         }
         case '/':
         {
@@ -422,8 +483,101 @@ Token Parser::lex(Reader* cpp_reader) {
                 Token t = {CPP_COMMENT, "/*", cpp_reader->get_cur_loc()-1};
                 return lex_comment(cpp_reader->next_char(), cpp_reader, t, 2);
             }
-
         }
+        case '%': 
+        {
+            char nc = cpp_reader->next_char();
+            if (nc == '=') {
+                return {CPP_MOD_EQ, "%=", cpp_reader->get_cur_loc()-1};
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_MOD, "%", cpp_reader->get_cur_loc()};
+            }
+        }
+        case '&': 
+        {
+            char nc = cpp_reader->next_char();
+            if (nc == '=') {
+                return {CPP_AND_EQ, "&=", cpp_reader->get_cur_loc()-1};
+            } else if (nc == '&') {
+                return {CPP_AND_AND, "&&", cpp_reader->get_cur_loc()-1};
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_AND, "&", cpp_reader->get_cur_loc()};
+            }
+        } 
+        case '|': 
+        {
+            char nc = cpp_reader->next_char();
+            if (nc == '=') {
+                return {CPP_OR_EQ, "|=", cpp_reader->get_cur_loc()-1};
+            } else if (nc == '|') {
+                return {CPP_OR_OR, "||", cpp_reader->get_cur_loc()-1};
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_OR, "|", cpp_reader->get_cur_loc()};
+            }
+        }
+        case '^': 
+        {
+            char nc = cpp_reader->next_char();
+            if (nc == '=') {
+                return {CPP_XOR_EQ, "^=", cpp_reader->get_cur_loc()-1};
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_XOR, "^", cpp_reader->get_cur_loc()};
+            }
+        }
+        case '~': 
+        {  
+            return {CPP_COMPL, "~", cpp_reader->get_cur_loc()};
+        }
+        case '?': 
+        {
+            return {CPP_QUERY, "?", cpp_reader->get_cur_loc()};
+        }
+        case '(':
+        {
+            return {CPP_OPEN_PAREN, "(", cpp_reader->get_cur_loc()};
+        }
+        case ')':
+        {
+            return {CPP_CLOSE_PAREN, ")", cpp_reader->get_cur_loc()};
+        }
+        case '[':
+        {
+            return {CPP_OPEN_SQUARE, "[", cpp_reader->get_cur_loc()};
+        }
+        case ']':
+        {
+            return {CPP_CLOSE_SQUARE, "]", cpp_reader->get_cur_loc()};
+        }
+        case '{':
+        {
+            return {CPP_OPEN_BRACE, "{", cpp_reader->get_cur_loc()};
+        }
+        case '}':
+        {
+            return {CPP_CLOSE_BRACE, "}", cpp_reader->get_cur_loc()};
+        }        
+        case ':': 
+        {
+            char nc = cpp_reader->next_char();
+            if (nc == ':') {
+                return {CPP_SCOPE, "::", cpp_reader->get_cur_loc()-1};
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_COLON, ":", cpp_reader->get_cur_loc()};
+            }
+        }
+        case ',': 
+        {
+            return {CPP_COMMA, ",", cpp_reader->get_cur_loc()};
+        }
+        case '#': {
+            return {CPP_PASTE, "#", cpp_reader->get_cur_loc()};
+        }
+
         default:
             //ERROR
             return {CPP_OTHER, "", 0};
