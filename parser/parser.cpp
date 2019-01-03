@@ -337,9 +337,10 @@ Token Parser::lex(Reader* cpp_reader) {
 
         case '>': {
             char nc = cpp_reader->next_char();
-            if (nc == '>') {
-                return {CPP_RSHIFT, ">>", cpp_reader->get_cur_loc()-1};
-            } else if (nc == '=')  {
+            // if (nc == '>') {
+            //     return {CPP_RSHIFT, ">>", cpp_reader->get_cur_loc()-1};
+            // } else 
+            if (nc == '=')  {
                 return {CPP_GREATER_EQ, ">=", cpp_reader->get_cur_loc()-1};
             } else {
                 cpp_reader->pre_char();
@@ -651,13 +652,14 @@ const std::deque<Token>& Parser::get_tokens() const {
 
 void Parser::f1() {
     for (auto t = _ts.begin(); t != _ts.end(); ) {
-        //数字的符号
+        //number sign
         if (t->type == CPP_PLUS || t->type == CPP_MINUS) {
             std::string sign = t->type == CPP_PLUS ? "+" : "-";
             if (t == _ts.begin()) {
                 auto t_n = t+1;
                 if (t_n != _ts.end() && t_n->type==CPP_NUMBER) {
                     t_n->val = sign + t_n->val;
+                    t_n->loc = t->loc;
                     t = _ts.erase(t);
                     continue;
                 }
@@ -666,11 +668,61 @@ void Parser::f1() {
                 auto t_p = t-1;
                 if (t_n != _ts.end() && t_n->type==CPP_NUMBER && t_p->type != CPP_NUMBER) {
                     t_n->val = sign + t_n->val;
+                    t_n->loc = t->loc;
                     t = _ts.erase(t);
                     continue;
                 }
             }
         }
+
+        //include header
+        if (t->type == CPP_PASTE) {
+            auto t_n = t+1;
+            if (t_n != _ts.end() && t_n->type == CPP_NAME && t_n->val == "include") {
+                auto t_nn = t_n+1;
+                if (t_nn != _ts.end() && t_nn->type == CPP_STRING) {
+                    //#include "***"
+                    t_nn->type = CPP_HEADER_NAME;
+                    t_nn->val = t_nn->val.substr(1,t_nn->val.length()-2);
+                    t_nn->loc = t->loc;
+                    t = _ts.erase(t);
+                    t = _ts.erase(t);
+                    continue;
+                } else if (t_nn != _ts.end() && t_nn->type == CPP_LESS) {
+                    //#include <***>
+                    //get >
+                    auto t_nnn = t_n+2;
+                    std::string include_str;
+                    int num_l = 0;
+                    bool got = false;
+                    while (t_nnn != _ts.end() && !got) {
+                        if (t_nnn->type != CPP_GREATER) {
+                            include_str += t_nnn->val;
+                            ++num_l;
+                            ++t_nnn;
+                            continue;
+                        } else {
+                            got = true;
+                        }
+                    }
+                    if (got) {
+                        t_nnn->type = CPP_HEADER_NAME;
+                        t_nnn->val = include_str;
+                        t_nnn->loc = t->loc;
+                        t = _ts.erase(t);//#
+                        t = _ts.erase(t);//include
+                        t = _ts.erase(t);//*.h
+                        while(num_l > 0) {
+                            t = _ts.erase(t);
+                            --num_l;
+                        }
+                        continue;
+                    }                  
+                }
+            }
+        }
+
+        //
 
         ++t;
     }
