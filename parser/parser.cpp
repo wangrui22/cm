@@ -90,7 +90,7 @@ Token Reader::get_last_token() {
 
 void Reader::skip_white() {
     char c = _file_str[_cur_loc];
-    if (c==' ' || c=='\t' || c=='\f' || c=='\v' || c=='\0') {
+    if (c==' ' || c=='\t' || c=='\f' || c=='\v' || c=='\0' || c=='\\') {
         ++_cur_loc;
         skip_white();
     }
@@ -132,12 +132,15 @@ static inline Token lex_number(char c, Reader* cpp_reader, Token& token,  int pe
     }
 
     if (-1 == input) {
+        if (!cpp_reader->eof()) {
+            cpp_reader->pre_char();
+        }
         if (per_status == 2 || per_status == 4 || per_status == 7) {
-            if (c == 'f') {
+            if (c == 'f' || c == 'L' || c == 'U') {
                 //f的尾注
                 token.val += c;
-                return token;
             }
+            return token;
         } else {
             token.type = CPP_OTHER;
             return token;
@@ -175,6 +178,9 @@ static inline Token lex_identifier(char c, Reader* cpp_reader, Token& token,  in
     }
 
     if (-1 == input) {
+        if (!cpp_reader->eof()) {
+            cpp_reader->pre_char();
+        }
         if (per_status == 2) {
             return token;
         } else {

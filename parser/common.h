@@ -258,7 +258,10 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             break;   
         case CPP_EOF: 
             out << "end of file";
-            break;    
+            break; 
+        case CPP_POINTER:
+            out << "->";
+            break; 
         default:
             out << "INVALID";
             break;    
