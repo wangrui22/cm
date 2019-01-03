@@ -104,6 +104,7 @@ static inline bool is_num(char c) {
     return c >= '0' && c <='9';
 }
 
+//十进制和八进制
 static inline Token lex_number(char c, Reader* cpp_reader, Token& token,  int per_status) {
     // *.*E(e)*
     //-------------------DFA-----------------//
@@ -151,6 +152,47 @@ static inline Token lex_number(char c, Reader* cpp_reader, Token& token,  int pe
     int next_status = DFA[input][per_status];
     return lex_number(cpp_reader->next_char(), cpp_reader, token, next_status);
 }
+
+//十进制和八进制
+static inline Token lex_hex(char c, Reader* cpp_reader, Token& token,  int per_status) {
+    // 0x(0~9|a~f|A-F)
+    //-------------------DFA-----------------//
+    //             | 0 | 1 | 2 |(3)|
+    //     0       | 1 |   |   |
+    //    x/X      |   | 2 |   |
+    // 0~9 a~f A~F |   |   | 3 | 3
+    const static char DFA[3][4] = {
+        1,-1,-1,-1,
+        -1,2,-1,-1,
+        -1,-1,3,3
+    };
+    //-------------------DFA-----------------//
+
+    int input = -1;
+    if (per_status == 0 && '0' ==  c) {
+        input = 0;
+    } else if (c == 'x' || c == 'X') {
+        input = 1;
+    } else if ((c >= '0' && c <= '9') || (c >= 'A' && c <='F') || (c >= 'a' && c <='f')) {
+        input = 2;
+    }
+
+    if (-1 == input) {
+        if (!cpp_reader->eof()) {
+            cpp_reader->pre_char();
+        }
+        if (per_status == 3) {
+            return token;
+        } else {
+            token.type = CPP_OTHER;
+            return token;
+        }
+    }
+    token.val += c;
+
+    int next_status = DFA[input][per_status];
+    return lex_hex(cpp_reader->next_char(), cpp_reader, token, next_status);
+} 
 
 static inline bool is_letter(char c) {
     return (c>='a' && c <='z') || (c>='A' && c <='Z');
@@ -345,7 +387,21 @@ Token Parser::lex(Reader* cpp_reader) {
         }
 
         //number
-        case '0': case '1': case '2': case '3': case '4':
+        case '0': 
+        {
+            //hex
+            char nc = cpp_reader->next_char();
+            if (nc == 'x' || nc == 'X') {
+                Token t = {CPP_NUMBER, "0x", cpp_reader->get_cur_loc()};
+                return lex_hex(cpp_reader->next_char(), cpp_reader, t, 2);    
+            } else {
+                //other number
+                cpp_reader->pre_char();
+                Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
+                return lex_number(c, cpp_reader, t, 2);
+            }
+        }
+        case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8': case '9':
         {
             Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
