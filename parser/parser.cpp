@@ -189,7 +189,36 @@ static inline Token lex_identifier(char c, Reader* cpp_reader, Token& token,  in
 }
 
 static inline Token lex_comment(char c, Reader* cpp_reader, Token& token, int per_status) {
-    //TODO
+    //-------------------DFA-----------------//
+    //       | 0 | 1 | 2 | 3 |(4)|
+    //  /    | 1 |-1 |-1 | 4 |-1 |
+    //  *    |-1 | 2 | 3 | 3 |-1 |
+    // other |-1 |-1 | 2 | 2 |-1 |
+    const static char DFA[3][5] = {
+        1,-1,-1,4,-1,
+        -1,2,3,3,-1,
+        -1,-1,2,2,-1
+    };
+    //-------------------DFA-----------------//
+
+    int input = -1;
+    if (c == '/') {
+        input = 0;
+    } else if (c == '*') {
+        input = 1;
+    } else {
+        input = 2;
+    }
+
+
+    token.val += c;
+
+    int next_status = DFA[input][per_status];
+    if (next_status == 4) {
+        return token;
+    } else {
+        return lex_comment(cpp_reader->next_char(), cpp_reader, token, next_status);
+    }
 }
 
 Parser::Parser() {
@@ -207,6 +236,9 @@ Token Parser::lex(Reader* cpp_reader) {
 
     char c = cpp_reader->next_char();
     switch(c) {
+        case '\n': {
+            return lex(cpp_reader);
+        }
         //brace
         case ' ': case '\t': case '\f': case '\v': case '\0':
         {
@@ -375,20 +407,20 @@ Token Parser::lex(Reader* cpp_reader) {
             if (nc == '=') {
                 return {CPP_DIV_EQ, "/=", cpp_reader->get_cur_loc()};
             } else if (nc == '/') {
-                //TODO
                 //注释
                 Token t = {CPP_COMMENT, "//", cpp_reader->get_cur_loc()-1};
                 while(true) {
                     nc = cpp_reader->next_char();
-                    if (nc == '/n' || cpp_reader->eof()) {
+                    if (nc == '\n' || cpp_reader->eof()) {
                         return t;
                     } else {
                         t.val += nc;
                     }
                 }
             } else if (nc == '*') {
-                //TODO
                 //注释
+                Token t = {CPP_COMMENT, "/*", cpp_reader->get_cur_loc()-1};
+                return lex_comment(cpp_reader->next_char(), cpp_reader, t, 2);
             }
 
         }
