@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <cassert>
+#include <stack>
 
 Reader::Reader() {
 
@@ -768,4 +769,142 @@ void Parser::f2() {
 
         ++t;
     }
+}
+
+// std::deque<FnDec> Parser::extract_function() {
+//     std::deque<FnDec> fns;
+    
+//     bool begin = false;
+//     std::deque<Token> pre_mods;        
+//     std::deque<Token> ret;
+//     Token fn_name;
+//     std::deque<Token> paras;
+//     std::deque<Token> post_mods;
+
+//     for (auto t = _ts.begin(); t != _ts.begin(); ++t) {
+//         auto t_n = t+1;
+//         if (!begin) {
+//             if (t->val == "virtual") {
+//                 pre_mods.push_back(*t);
+//                 begin = true;
+//                 ++t;
+//             } else if (t->val == "explict") {
+//                 pre_mods.push_back(*t);
+//                 begin = true;
+//                 ++t;
+//             } else if (t_n != _ts.end() &&  t->val == "~" && t_n->val == "virtual") {
+//                 pre_mods.push_back(*t);
+//                 pre_mods.push_back(*t_n);
+//                 ++t;
+//                 ++t;
+//                 begin = true;
+//             }
+//         }
+//     }
+
+//     return fns;
+// }
+
+void Parser::extract_class() {
+    _class.clear();
+    for (auto t = _ts.begin(); t != _ts.end(); ++t) {
+        if (t->val == "class") {
+            auto t_n = t+1;
+            if (t_n != _ts.end() && t_n->type == CPP_NAME) {
+                t_n->type = CPP_CLASS;
+                _class.insert(t_n->val);
+            }
+            ++t;
+        } else if (t->val == "struct") {
+            auto t_n = t+1;
+            if (t_n != _ts.end() && t_n->type == CPP_NAME) {
+                t_n->type = CPP_STURCT;
+                _class.insert(t_n->val);
+            }
+            ++t;
+        }
+    }
+}
+
+void Parser::extract_class_fn() {
+    _class_fn.clear();
+    for (auto t = _ts.begin(); t != _ts.end(); ) {
+        if (t->type == CPP_CLASS) {
+
+            const std::string class_name = t->val;
+
+            std::stack<Token> sb;
+            std::deque<Token>::iterator fn_begin = t;
+            std::deque<Token>::iterator fn_end = t;
+
+            //find begin scope
+            while(t->type != CPP_OPEN_BRACE) {
+                fn_begin = t+1;
+                ++t;
+                sb.push(*t);
+            }
+            ++t;
+
+            //find end scope
+            while(!sb.empty()) {
+                if (t->type == CPP_OPEN_BRACE) {
+                    sb.push(*t);
+                    ++t;
+                    continue;
+                }
+                if (t->type == CPP_CLOSE_BRACE && sb.top().type == CPP_OPEN_BRACE) {
+                    sb.pop();
+                    if (sb.empty()) {
+                        fn_end = t;
+                    }
+                    ++t;
+                    continue;
+                }
+                
+                ++t;
+            }
+
+            //extract class function
+            //找括号组
+            std::set<std::string> fns;
+            std::stack<std::deque<Token>::iterator> sbi;
+            auto tc = fn_begin;
+            while(tc != fn_end) {
+                if (tc->val == "public") {
+                    break;
+                } else {
+                    ++tc;
+                    continue;
+                }
+            }
+
+            for (; tc != fn_end; ) {
+                if (tc->type == CPP_OPEN_PAREN) {
+                    sbi.push(tc);
+                    ++tc;
+                    continue;
+                }
+                if (tc->type == CPP_CLOSE_PAREN && sbi.top()->type == CPP_OPEN_PAREN) {
+                    auto fend = sbi.top();
+                    sbi.pop();
+                    fns.insert((fend-1)->val);
+                    ++tc;
+                    continue;
+                }
+
+                ++tc;
+            }
+            _class_fn[class_name] = fns;
+        }
+
+        ++t;
+    }
+}
+
+const std::map<std::string, std::set<std::string>>& Parser::get_class_fns() const {
+    return _class_fn;
+}
+
+const std::set<std::string>& Parser::get_classes() const {
+    return _class;
 }

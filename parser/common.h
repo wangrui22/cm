@@ -80,6 +80,8 @@ enum TokenType {
     CPP_POINTER,//指针 ->
     CPP_OPEN_ANGLE, //<
     CPP_CLOSE_ANGLE, //>
+    CPP_CLASS, // 类名
+    CPP_STURCT, // 结构体名
 };
 
 struct Token {
@@ -89,10 +91,11 @@ struct Token {
 };
 
 struct FnDec {
-    std::string mod;
+    std::string pre_mod;
     std::string ret;
     std::string name;
     std::vector<std::string> para;
+    std::string post_mod;
 };
 
 const int NUM_KEYWORDS = 86;
@@ -400,6 +403,12 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             break;
         case CPP_TYPE: 
             out << "type";
+            break;
+        case CPP_CLASS:
+            out << "class";
+            break;
+        case CPP_STURCT:
+            out << "sturct";
             break;
         default:
             out << "INVALID";

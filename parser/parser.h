@@ -3,6 +3,8 @@
 
 #include <string>
 #include <deque>
+#include <set>
+#include <map>
 #include "common.h"
 
 class Reader {
@@ -33,18 +35,26 @@ public:
     ~Parser();
 
     Token lex(Reader* cpp_reader);
-
-    void f1();
-
-    void f2();
-
-    void syntax_function();
-
     void push_token(const Token& t);
     const std::deque<Token>& get_tokens() const;
 
+    //loop
+    void f1();
+    void f2();
+
+    //接口混淆
+    void extract_class();
+    void extract_class_fn();
+    void syntax_function();
+
+    const std::set<std::string>& get_classes() const;
+    const std::map<std::string, std::set<std::string>>& get_class_fns() const;
+
 private:
     std::deque<Token> _ts;
+
+    std::set<std::string> _class;
+    std::map<std::string, std::set<std::string>> _class_fn;
 };
 
 #endif
