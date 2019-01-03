@@ -20,6 +20,7 @@ int main(int argc, char* argv[]) {
         }        
     }
     parser.f1();
+    parser.f2();
 
     const std::deque<Token>& ts = parser.get_tokens();
     for (auto it=ts.begin(); it!=ts.end(); ++it) {

@@ -36,6 +36,10 @@ public:
 
     void f1();
 
+    void f2();
+
+    void syntax_function();
+
     void push_token(const Token& t);
     const std::deque<Token>& get_tokens() const;
 

@@ -650,6 +650,14 @@ const std::deque<Token>& Parser::get_tokens() const {
     return _ts;
 }
 
+static inline bool is_type(const std::string& str) {
+    for (int i=0; i<NUM_TYPE; ++i) {
+        if (str == types[i]) {
+            return true;
+        }
+    }
+} 
+
 void Parser::f1() {
     for (auto t = _ts.begin(); t != _ts.end(); ) {
         //number sign
@@ -722,7 +730,41 @@ void Parser::f1() {
             }
         }
 
-        //
+        //type
+        if (t->type == CPP_NAME && t->val == "size_t") {
+            t->type = CPP_TYPE;
+            ++t;
+            continue;
+        }
+        if (t->type == CPP_KEYWORD && is_type(t->val)) {
+            t->type = CPP_TYPE;
+            ++t;
+            continue;
+        }
+
+        //marco
+        // if (t->type == CPP_PASTE) {
+        //     auto t_n = t+1;
+        //     if () 
+        // }
+
+        ++t;
+    }
+}
+
+void Parser::f2() { 
+    for (auto t = _ts.begin(); t != _ts.end(); ) {
+        //conbine type
+        if (t->type == CPP_TYPE) {
+            auto t_n = t+1;
+            while(t_n!=_ts.end() && t_n->type == CPP_TYPE) {
+                t_n->val = t->val + " " + t_n->val;
+                t = _ts.erase(t);
+                t_n = t+1;
+            }
+            ++t;
+            continue;
+        }
 
         ++t;
     }

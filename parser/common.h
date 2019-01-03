@@ -3,6 +3,7 @@
 
 #include <string>
 #include <ostream>
+#include <vector>
 
 enum TokenType {
     CPP_EQ = 0, // =
@@ -74,6 +75,7 @@ enum TokenType {
     CPP_EOF,// 文件尾
     
     //自己加的内容
+    CPP_TYPE, //类型
     CPP_KEYWORD,//关键字
     CPP_POINTER,//指针 ->
     CPP_OPEN_ANGLE, //<
@@ -84,6 +86,13 @@ struct Token {
     TokenType type;
     std::string val;
     int loc;
+};
+
+struct FnDec {
+    std::string mod;
+    std::string ret;
+    std::string name;
+    std::vector<std::string> para;
 };
 
 const int NUM_KEYWORDS = 86;
@@ -174,6 +183,37 @@ static const char* keywords[NUM_KEYWORDS] = {
 "while",
 "xor",
 "xor_eq"
+};
+
+const int NUM_TYPE = 26; 
+static const char* types[NUM_TYPE] = {
+"unsigned",
+"char",
+"unsigned char",
+"short",
+"unsigned short",
+"int",
+"unsigned int",
+"long",
+"unsigned long",
+"long long",
+"unsigned long long",
+"long int",
+"unsigned long int",
+"long long int",
+"unsigned long long int",
+"int8_t",
+"int16_t",
+"int32_t",
+"int64_t",
+"uint8_t",
+"uint16_t",
+"uint32_t",
+"uint64_t",
+"float",
+"double"
+"bool",
+"size_t",
 };
 
 inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
@@ -338,7 +378,7 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             out << "string";
             break;
         case CPP_HEADER_NAME: 
-            out << "<header>";
+            out << "header";
             break;   
         case CPP_COMMENT: 
             out << "comment";
@@ -357,6 +397,9 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             break; 
         case CPP_KEYWORD: 
             out << "keyword";
+            break;
+        case CPP_TYPE: 
+            out << "type";
             break;
         default:
             out << "INVALID";
