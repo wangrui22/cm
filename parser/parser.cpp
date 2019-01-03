@@ -325,12 +325,12 @@ Token Parser::lex(Reader* cpp_reader) {
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
         case 'g': case 'h': case 'i': case 'j': case 'k': case 'l':
         case 'm': case 'n': case 'o': case 'p': case 'q': case 'r':
-        case 's': case 't':           case 'v': case 'w': case 'x':
+        case 's': case 't': case 'u': case 'v': case 'w': case 'x':
         case 'y': case 'z':
         case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-        case 'G': case 'H': case 'I': case 'J': case 'K':
-        case 'M': case 'N': case 'O': case 'P': case 'Q':
-        case 'S': case 'T':           case 'V': case 'W': case 'X':
+        case 'G': case 'H': case 'I': case 'J': case 'K': case 'L':
+        case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R':
+        case 'S': case 'T': case 'U': case 'V': case 'W': case 'X':
         case 'Y': case 'Z':
         {
             Token t  ={ CPP_NAME, "", cpp_reader->get_cur_loc()};
@@ -369,21 +369,21 @@ Token Parser::lex(Reader* cpp_reader) {
 
         case '-':
         {
-            Token t = cpp_reader->get_last_token();
-            //数字
-            if (t.type == CPP_OPEN_PAREN ||
-                t.type == CPP_EQ ||
-                t.type == CPP_EQ_EQ ||
-                t.type == CPP_NOT_EQ ||
-                t.type == CPP_GREATER ||
-                t.type == CPP_LESS ||
-                t.type == CPP_EQ_EQ ||
-                t.type == CPP_NOT_EQ ||
-                t.type == CPP_GREATER_EQ || 
-                t.type == CPP_LESS_EQ) {
-                Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
-                return lex_number(c, cpp_reader, t, 0);
-            }
+            // Token t = cpp_reader->get_last_token();
+            // //TODO 带符号数字的解析这样可以吗, 还是需要二次合并
+            // if (t.type == CPP_OPEN_PAREN ||
+            //     t.type == CPP_EQ ||
+            //     t.type == CPP_EQ_EQ ||
+            //     t.type == CPP_NOT_EQ ||
+            //     t.type == CPP_GREATER ||
+            //     t.type == CPP_LESS ||
+            //     t.type == CPP_EQ_EQ ||
+            //     t.type == CPP_NOT_EQ ||
+            //     t.type == CPP_GREATER_EQ || 
+            //     t.type == CPP_LESS_EQ) {
+            //     Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
+            //     return lex_number(c, cpp_reader, t, 0);
+            // }
 
             char nc = cpp_reader->next_char();
             if (nc == '=') {
@@ -402,20 +402,20 @@ Token Parser::lex(Reader* cpp_reader) {
         }
         case '+':
         {
-            Token t = cpp_reader->get_last_token();
-            if (t.type == CPP_OPEN_PAREN ||
-                t.type == CPP_EQ ||
-                t.type == CPP_EQ_EQ ||
-                t.type == CPP_NOT_EQ ||
-                t.type == CPP_GREATER ||
-                t.type == CPP_LESS ||
-                t.type == CPP_EQ_EQ ||
-                t.type == CPP_NOT_EQ ||
-                t.type == CPP_GREATER_EQ || 
-                t.type == CPP_LESS_EQ) {
-                Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
-                return lex_number(c, cpp_reader, t, 0);
-            }
+            // Token t = cpp_reader->get_last_token();
+            // if (t.type == CPP_OPEN_PAREN ||
+            //     t.type == CPP_EQ ||
+            //     t.type == CPP_EQ_EQ ||
+            //     t.type == CPP_NOT_EQ ||
+            //     t.type == CPP_GREATER ||
+            //     t.type == CPP_LESS ||
+            //     t.type == CPP_EQ_EQ ||
+            //     t.type == CPP_NOT_EQ ||
+            //     t.type == CPP_GREATER_EQ || 
+            //     t.type == CPP_LESS_EQ) {
+            //     Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
+            //     return lex_number(c, cpp_reader, t, 0);
+            // }
 
             char nc = cpp_reader->next_char();
             if (nc == '=') {
@@ -482,6 +482,9 @@ Token Parser::lex(Reader* cpp_reader) {
                 //注释
                 Token t = {CPP_COMMENT, "/*", cpp_reader->get_cur_loc()-1};
                 return lex_comment(cpp_reader->next_char(), cpp_reader, t, 2);
+            } else {
+                cpp_reader->pre_char();
+                return {CPP_DIV, "/", cpp_reader->get_cur_loc()};
             }
         }
         case '%': 
