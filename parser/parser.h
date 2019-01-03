@@ -21,16 +21,10 @@ public:
     std::string get_string(int loc, int len);
     void skip_white();
 
-    void push_token(const Token& t);
-    Token get_last_token();
-    const std::deque<Token>& get_tokens() const;
-
 private:
     std::string _file_str;
     int _cur_line;
     int _cur_loc;
-
-    std::deque<Token> _ts;
 };
 
 class Parser {
@@ -39,8 +33,14 @@ public:
     ~Parser();
 
     Token lex(Reader* cpp_reader);
-private:
 
+    void f1();
+
+    void push_token(const Token& t);
+    const std::deque<Token>& get_tokens() const;
+
+private:
+    std::deque<Token> _ts;
 };
 
 #endif

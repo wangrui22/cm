@@ -14,13 +14,14 @@ int main(int argc, char* argv[]) {
     Parser parser;
 
     while(true) {
-        reader.push_token(parser.lex(&reader));
+        parser.push_token(parser.lex(&reader));
         if (reader.eof()) {
             break;
         }        
     }
+    parser.f1();
 
-    const std::deque<Token>& ts = reader.get_tokens();
+    const std::deque<Token>& ts = parser.get_tokens();
     for (auto it=ts.begin(); it!=ts.end(); ++it) {
         const Token& t = *it;
         std::cout << t.type << ": " << t.val << std::endl;

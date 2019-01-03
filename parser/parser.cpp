@@ -76,28 +76,12 @@ std::string Reader::get_string(int loc, int len) {
     return _file_str.substr(loc, len);
 }
 
-void Reader::push_token(const Token& t) {
-    _ts.push_back(t);
-}
-
-Token Reader::get_last_token() {
-    if (_ts.empty()) {
-        return {CPP_OTHER, "",0};
-    } else {
-        return _ts.back();
-    }
-}
-
 void Reader::skip_white() {
     char c = _file_str[_cur_loc];
     if (c==' ' || c=='\t' || c=='\f' || c=='\v' || c=='\0' || c=='\\') {
         ++_cur_loc;
         skip_white();
     }
-}
-
-const std::deque<Token>& Reader::get_tokens() const {
-    return _ts;
 }
 
 static inline bool is_num(char c) {
@@ -224,6 +208,12 @@ static inline Token lex_identifier(char c, Reader* cpp_reader, Token& token,  in
             cpp_reader->pre_char();
         }
         if (per_status == 2) {
+            for (int i=0; i<NUM_KEYWORDS; ++i) {
+                if (token.val == keywords[i]) {
+                    token.type = CPP_KEYWORD;
+                    break;
+                }
+            }
             return token;
         } else {
             token.type = CPP_OTHER;
@@ -649,4 +639,39 @@ Token Parser::lex(Reader* cpp_reader) {
     }
 
     return {};
+}
+
+void Parser::push_token(const Token& t) {
+    _ts.push_back(t);
+}
+
+const std::deque<Token>& Parser::get_tokens() const {
+    return _ts;
+}
+
+void Parser::f1() {
+    for (auto t = _ts.begin(); t != _ts.end(); ) {
+        //数字的符号
+        if (t->type == CPP_PLUS || t->type == CPP_MINUS) {
+            std::string sign = t->type == CPP_PLUS ? "+" : "-";
+            if (t == _ts.begin()) {
+                auto t_n = t+1;
+                if (t_n != _ts.end() && t_n->type==CPP_NUMBER) {
+                    t_n->val = sign + t_n->val;
+                    t = _ts.erase(t);
+                    continue;
+                }
+            } else {
+                auto t_n = t+1;
+                auto t_p = t-1;
+                if (t_n != _ts.end() && t_n->type==CPP_NUMBER && t_p->type != CPP_NUMBER) {
+                    t_n->val = sign + t_n->val;
+                    t = _ts.erase(t);
+                    continue;
+                }
+            }
+        }
+
+        ++t;
+    }
 }
