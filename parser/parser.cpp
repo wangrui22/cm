@@ -809,6 +809,7 @@ void Parser::extract_class() {
     _class.clear();
     for (auto t = _ts.begin(); t != _ts.end(); ++t) {
         if (t->val == "class") {
+            //TODO 需要排除类前面跟着的修饰符
             auto t_n = t+1;
             if (t_n != _ts.end() && t_n->type == CPP_NAME) {
                 t_n->type = CPP_CLASS;
@@ -841,8 +842,8 @@ void Parser::extract_class_fn() {
             while(t->type != CPP_OPEN_BRACE) {
                 fn_begin = t+1;
                 ++t;
-                sb.push(*t);
             }
+            sb.push(*t);
             ++t;
 
             //find end scope
