@@ -82,6 +82,24 @@ enum TokenType {
     CPP_CLOSE_ANGLE, //>
     CPP_CLASS, // 类名
     CPP_STURCT, // 结构体名
+
+    /*
+    defined
+    if
+    elif
+    else
+    endif
+    ifdef
+    ifndef
+    define
+    undef
+    include//这个合并在Header中
+    error
+    pragma
+    line
+    */
+    CPP_PREPROCESSOR, //预处理 和#连接的内容
+
 };
 
 struct Token {

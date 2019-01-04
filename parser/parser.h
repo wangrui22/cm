@@ -13,6 +13,7 @@ public:
     ~Reader();
 
     int read(const std::string& file);
+    const std::string& get_file_path();
     char cur_char();
     char next_char();
     char pre_char();
@@ -25,6 +26,7 @@ public:
 
 private:
     std::string _file_str;
+    std::string _file_path;
     int _cur_line;
     int _cur_loc;
 };
@@ -55,6 +57,20 @@ private:
 
     std::set<std::string> _class;
     std::map<std::string, std::set<std::string>> _class_fn;
+};
+
+
+class ParserGroup {
+public:
+    ParserGroup();
+    ~ParserGroup();
+
+    void add_parser(const std::string& file_name, Parser* parser);
+    Parser* get_parser(const std::string& file_name);
+
+private:
+    std::vector<Token> _g_marco;//全局宏定义
+    std::map<std::string, Parser*> _parsers;
 };
 
 #endif

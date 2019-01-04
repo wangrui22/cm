@@ -14,6 +14,7 @@ Reader::~Reader() {
 }
 
 int Reader::read(const std::string& file) {
+    _file_path = file;
     std::ifstream in(file, std::ios::in);
     if (in.is_open()) {
         std::stringstream ss;
@@ -26,6 +27,10 @@ int Reader::read(const std::string& file) {
     } else {
         return -1;
     }
+}
+
+const std::string& Reader::get_file_path() {
+    return _file_path;
 }
 
 char Reader::cur_char() {
