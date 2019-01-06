@@ -1,7 +1,7 @@
 all: l1
 
 l1: parser.o main.o util.o
-	g++ -std=c++11 -g -o l1 main.o parser.o -lpthread -lboost_system -lboost_filesystem -lboost_thread
+	g++ -std=c++11 -g -o l1 main.o parser.o util.o -lpthread -lboost_system -lboost_filesystem -lboost_thread
 
 main.o: main.cpp parser.o util.o
 	g++ -std=c++11 -g -c main.cpp

@@ -94,3 +94,8 @@ int Util::get_all_file_recursion(
         return -1;
     }
 }
+
+std::string Util::get_file_name(const std::string& path) {
+    boost::filesystem::path p(path);    
+    return p.filename().string();
+}

@@ -961,3 +961,167 @@ const std::map<std::string, std::set<std::string>>& Parser::get_class_fns() cons
 const std::set<std::string>& Parser::get_classes() const {
     return _class;
 }
+
+
+ParserGroup::ParserGroup() {
+
+}
+
+ParserGroup::~ParserGroup() {
+
+}
+
+void ParserGroup::add_parser(const std::string& file_name, Parser* parser) {
+    _parsers[file_name] = parser;
+}
+
+Parser* ParserGroup::get_parser(const std::string& file_name) {
+    auto it = _parsers.find(file_name);
+    if (it != _parsers.end()) {
+        return it->second;
+    } else {
+        return nullptr;
+    }
+}
+
+void ParserGroup::extract_marco() {
+    //l1 找纯粹的 define
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            if (t->type == CPP_PREPROCESSOR && t->val == "define") {
+                if (t == ts.begin()) {
+                    //t->type = CPP_MACRO;
+                    _g_marco.push_back(*t);
+                } else if ((t-1)->type != CPP_PREPROCESSOR) {
+                    //t->type = CPP_MACRO;
+                    _g_marco.push_back(*t);
+                }
+                ++t;
+                continue;
+            }
+
+            ++t;
+        }
+    } 
+    //l2 解析所有 #ifdef else #endif 和 #ifndef else #endif 条件判断语句
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            if (t->type == CPP_PREPROCESSOR && (t->val == "ifndef" || t->val == "ifdef")) {
+                std::stack<Token> is;
+                is.push(*t);
+                while(!is.empty()) {
+                    if(is.top().val == "ifdef" || is.top().val == "ifndef") {
+                        assert(!is.top().ts.empty());
+                        bool target = is.top().val == "ifdef";
+                        if (target == is_in_marco(is.top().ts[0].val)) {
+                            is.push(*(++t));
+                            continue;
+                        } else {
+                            ++t;
+                            //找else 或者 endif
+                            while(!(t->val == "else" || t->val == "endif")) {
+                                ++t;
+                            }
+                            if (t->val == "else") {
+                                is.push(*(++t));
+                                continue;
+                            } else {
+                                is.push(*t);
+                                continue;
+                            }
+                        }
+                    } else if (is.top().val == "endif"){
+                        is.pop();
+                        is.pop();
+                    } else {
+                        //执行
+                        //assert(is.top().type == CPP_PREPROCESSOR);
+                        if (is.top().val == "define") {
+                            _g_marco.push_back(is.top());
+                            is.pop();
+                        } 
+                        else {
+                            //std::cout << "Err:" << is.top().val << "\n";
+                            is.pop();
+                        }
+                    }
+                }
+                continue;   
+            }
+
+            ++t;
+        }
+    }
+}
+
+void ParserGroup::debug(const std::string& debug_out) {
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        const std::string f = debug_out+"/"+it->first+".l1";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            continue;
+        }
+
+        const std::deque<Token>& ts = parser.get_tokens();
+        for (auto it=ts.begin(); it!=ts.end(); ++it) {
+            const Token& t = *it;
+            if (!t.ts.empty()) {
+                out << t.type << ": " << t.val << " ";
+                for (auto it2 = t.ts.begin(); it2 != t.ts.end(); ++it2) {
+                    out << it2->val << " ";
+                }
+                out << "\n";
+            } else {
+                out << t.type << ": " << t.val << std::endl;
+            }
+        }
+
+        out << "\n//----------------------------------------//\n";
+        const std::set<std::string> classes = parser.get_classes();
+        for (auto it=classes.begin(); it!=classes.end(); ++it) {
+            out << "class: " << *it << std::endl;
+        }
+
+        out << "\n//----------------------------------------//\n";
+        const std::map<std::string, std::set<std::string>> class_fns = parser.get_class_fns();
+        for (auto it=class_fns.begin(); it!=class_fns.end(); ++it) {
+            for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
+                out << it->first << "::" << *it2 << std::endl;
+            }
+        }
+
+        out.close();
+    }
+
+    //print all marco
+    const std::string f = debug_out+"/global_marco";
+    std::ofstream out(f, std::ios::out);
+    if (!out.is_open()) {
+        std::cerr << "err to open: " << f << "\n";
+        return;
+    }
+    for (auto it = _g_marco.begin(); it != _g_marco.end(); ++it) { 
+        out << (*it).val << ": ";
+        for (auto it2 = (*it).ts.begin(); it2 != (*it).ts.end(); ++it2) {
+           out << (*it2).val << " "; 
+        }
+        out << std::endl;
+    }
+    out.close();
+}
+
+bool ParserGroup::is_in_marco(const std::string& m) {
+    for (auto it=_g_marco.begin(); it != _g_marco.end(); ++it) {
+        if ((*it).val == m) {
+            return true;
+        }
+    }
+
+    return false;
+}

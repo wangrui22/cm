@@ -33,6 +33,8 @@ private:
 
 class Parser {
 public: 
+    friend class ParserGroup;
+
     Parser();
     ~Parser();
 
@@ -67,6 +69,12 @@ public:
 
     void add_parser(const std::string& file_name, Parser* parser);
     Parser* get_parser(const std::string& file_name);
+
+    void extract_marco();
+
+    bool is_in_marco(const std::string& m);
+
+    void debug(const std::string& debug_out);
 
 private:
     std::vector<Token> _g_marco;//全局宏定义

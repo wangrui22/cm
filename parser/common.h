@@ -70,7 +70,7 @@ enum TokenType {
     //CPP_WSTRING,//暂时不解析
     CPP_HEADER_NAME, // <header.h> 
     CPP_COMMENT, // 注释
-    CPP_MACRO_ARG, // TODO 宏 ? 不知道怎么处理
+    CPP_MACRO, // TODO 宏 ? 不知道怎么处理
     CPP_PADDING, // TODO 不知道怎么处理
     CPP_EOF,// 文件尾
     
@@ -100,8 +100,6 @@ enum TokenType {
     CPP_BR, //换行
     CPP_CONNECTOR, //连接符号 '\\'  /
     CPP_PREPROCESSOR, //预处理 和#连接的内容
-
-
 };
 
 struct Token {
@@ -407,8 +405,8 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
         case CPP_COMMENT: 
             out << "comment";
             break;   
-        case CPP_MACRO_ARG: 
-            out << "CPP_MACRO_ARG";
+        case CPP_MACRO: 
+            out << "marco";
             break;   
         case CPP_PADDING: 
             out << "CPP_PADDING";
