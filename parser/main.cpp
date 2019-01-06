@@ -28,7 +28,15 @@ int main(int argc, char* argv[]) {
     const std::deque<Token>& ts = parser.get_tokens();
     for (auto it=ts.begin(); it!=ts.end(); ++it) {
         const Token& t = *it;
-        std::cout << t.type << ": " << t.val << std::endl;
+        if (t.type == CPP_PREPROCESSOR) {
+            std::cout << t.type << ": " << t.val << " ";
+            for (auto it2 = t.ts.begin(); it2 != t.ts.end(); ++it2) {
+                std::cout << it2->val << " ";
+            }
+            std::cout << "\n";
+        } else {
+            std::cout << t.type << ": " << t.val << std::endl;
+        }
     }
 
     std::cout << "\n//----------------------------------------//\n";

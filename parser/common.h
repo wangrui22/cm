@@ -84,7 +84,6 @@ enum TokenType {
     CPP_STURCT, // 结构体名
 
     /*
-    defined
     if
     elif
     else
@@ -98,7 +97,10 @@ enum TokenType {
     pragma
     line
     */
+    CPP_BR, //换行
+    CPP_CONNECTOR, //连接符号 '\\'  /
     CPP_PREPROCESSOR, //预处理 和#连接的内容
+
 
 };
 
@@ -106,6 +108,7 @@ struct Token {
     TokenType type;
     std::string val;
     int loc;
+    std::deque<Token> ts;//多遍的时候会合并到这里
 };
 
 struct FnDec {
@@ -427,6 +430,15 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             break;
         case CPP_STURCT:
             out << "sturct";
+            break;
+        case CPP_BR: 
+            out << "br";
+            break;
+        case CPP_PREPROCESSOR:
+            out << "preprocessor";
+            break;
+        case CPP_CONNECTOR: 
+            out << "\\";
             break;
         default:
             out << "INVALID";

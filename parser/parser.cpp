@@ -84,7 +84,7 @@ std::string Reader::get_string(int loc, int len) {
 
 void Reader::skip_white() {
     char c = _file_str[_cur_loc];
-    if (c==' ' || c=='\t' || c=='\f' || c=='\v' || c=='\0' || c=='\\') {
+    if (c==' ' || c=='\t' || c=='\f' || c=='\v' || c=='\0') {
         ++_cur_loc;
         skip_white();
     }
@@ -309,18 +309,21 @@ Token Parser::lex(Reader* cpp_reader) {
     char c = cpp_reader->next_char();
     switch(c) {
         case '\n': {
-            return lex(cpp_reader);
+            return {CPP_BR, "br", cpp_reader->get_cur_loc()};
+            //return lex(cpp_reader);
         }
         case ';': {
             return {CPP_SEMICOLON, ";", cpp_reader->get_cur_loc()};
         }
         //brace
-        case ' ': case '\t': case '\f': case '\v': case '\0':
+        case ' ': case '\t': case '\f': case '\v': case '\0': 
         {
             cpp_reader->skip_white();
             return lex(cpp_reader);
         }
-
+        case '\\': {
+            return {CPP_CONNECTOR, ";", cpp_reader->get_cur_loc()};
+        }
         case '=': {
             char nc = cpp_reader->next_char();
             if (nc=='=') {
@@ -343,6 +346,7 @@ Token Parser::lex(Reader* cpp_reader) {
 
         case '>': {
             char nc = cpp_reader->next_char();
+            //TODO 运算符右移 和 模板有冲突
             // if (nc == '>') {
             //     return {CPP_RSHIFT, ">>", cpp_reader->get_cur_loc()-1};
             // } else 
@@ -689,9 +693,9 @@ void Parser::f1() {
             }
         }
 
-        //include header
         if (t->type == CPP_PASTE) {
             auto t_n = t+1;
+            //include header
             if (t_n != _ts.end() && t_n->type == CPP_NAME && t_n->val == "include") {
                 auto t_nn = t_n+1;
                 if (t_nn != _ts.end() && t_nn->type == CPP_STRING) {
@@ -733,6 +737,38 @@ void Parser::f1() {
                         continue;
                     }                  
                 }
+            } 
+            //preprocess
+            else if (t_n != _ts.end() && (t_n->type==CPP_NAME || t_n->type==CPP_KEYWORD)) {
+                if (t_n->val == "define" || t_n->val == "if" || t_n->val == "elif" || 
+                    t_n->val == "else" || t_n->val == "ifndef" || t_n->val == "ifdef" ||
+                    t_n->val == "pragma" || t_n->val == "error" || 
+                    t_n->val == "undef" || t_n->val == "line") {
+                    t->val = t_n->val;
+                    t->type = CPP_PREPROCESSOR;
+                    ++t;
+                    t = _ts.erase(t);//erase properssor
+                    while(t->type != CPP_EOF) {
+                        if (t->type == CPP_CONNECTOR && (t+1)->type == CPP_BR) {
+                            //erase connector and br
+                            t = _ts.erase(t);
+                            t = _ts.erase(t);
+                        } else if (t->type == CPP_BR) {
+                            break;
+                        } else {
+                            (t-1)->ts.push_back(*t);
+                            t = _ts.erase(t);
+                        }
+                    }
+                    continue;
+                } else if (t_n->val == "endif") {
+                    t->val = t_n->val;
+                    t->type = CPP_PREPROCESSOR;
+                    ++t;
+                    t = _ts.erase(t);//erase properssor
+                    continue;
+                }
+
             }
         }
 
@@ -769,6 +805,17 @@ void Parser::f2() {
                 t_n = t+1;
             }
             ++t;
+            continue;
+        }
+        //erase br
+        if (t->type == CPP_BR) {
+            t = _ts.erase(t);
+            continue;
+        }
+
+        //erase connector
+        if (t->type == CPP_CONNECTOR) {
+            t = _ts.erase(t);
             continue;
         }
 
