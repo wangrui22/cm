@@ -1022,16 +1022,25 @@ void ParserGroup::extract_marco() {
                             continue;
                         } else {
                             ++t;
+                            std::stack<Token> is_r;
                             //找else 或者 endif
-                            while(!(t->val == "else" || t->val == "endif")) {
+                            GET_ELSE_BRANCH:                        
+                            while(!(t->val == "else" || t->val == "endif" || t->val == "ifdef" || t->val == "ifndef")) {
                                 ++t;
                             }
-                            if (t->val == "else") {
+                            if (is_r.empty() && t->val == "else") {
                                 is.push(*(++t));
                                 continue;
-                            } else {
+                            } else if (is_r.empty() && t->val == "endif") {
                                 is.push(*t);
                                 continue;
+                            } else if (t->val == "ifdef" || t->val== "ifndef") {
+                                is_r.push(*(t++));
+                                goto GET_ELSE_BRANCH;
+                            } else if (!is_r.empty() && t->val == "endif") {
+                                is_r.pop();
+                                ++t;
+                                goto GET_ELSE_BRANCH;
                             }
                         }
                     } else if (is.top().val == "endif"){
