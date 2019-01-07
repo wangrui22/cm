@@ -1005,20 +1005,22 @@ void ParserGroup::extract_marco() {
             ++t;
         }
     } 
-    //l2 解析所有 #ifdef else #endif 和 #ifndef else #endif 条件判断语句
+
+    //l2 解析所有 #ifdef else #endif 和 #ifndef else #endif 条件判断语句, 进一步抽取全局宏
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
         std::deque<Token>& ts = parser._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->type == CPP_PREPROCESSOR && (t->val == "ifndef" || t->val == "ifdef")) {
+                //预处理语句开始
                 std::stack<Token> is;
-                is.push(*t);
-                while(!is.empty()) {
-                    if(is.top().val == "ifdef" || is.top().val == "ifndef") {
+                while(true) {
+                    is.push(*t);
+                    if(is.top().val == "ifndef" || is.top().val == "ifdef") {
                         assert(!is.top().ts.empty());
                         bool target = is.top().val == "ifdef";
                         if (target == is_in_marco(is.top().ts[0].val)) {
-                            is.push(*(++t));
+                            ++t;
                             continue;
                         } else {
                             ++t;
@@ -1029,40 +1031,57 @@ void ParserGroup::extract_marco() {
                                 ++t;
                             }
                             if (is_r.empty() && t->val == "else") {
-                                is.push(*(++t));
+                                //is.push(*(++t));
+                                ++t;
                                 continue;
                             } else if (is_r.empty() && t->val == "endif") {
-                                is.push(*t);
+                                //is.push(*t);
                                 continue;
                             } else if (t->val == "ifdef" || t->val== "ifndef") {
-                                is_r.push(*(t++));
-                                goto GET_ELSE_BRANCH;
+                                //is_r.push(*(t++));
+                                //goto GET_ELSE_BRANCH;
+                                continue;
                             } else if (!is_r.empty() && t->val == "endif") {
                                 is_r.pop();
                                 ++t;
-                                goto GET_ELSE_BRANCH;
+                                //goto GET_ELSE_BRANCH;
+                                continue;
                             }
                         }
                     } else if (is.top().val == "endif"){
                         is.pop();
                         is.pop();
-                    } else {
-                        //执行
-                        //assert(is.top().type == CPP_PREPROCESSOR);
-                        if (is.top().val == "define") {
-                            _g_marco.push_back(is.top());
-                            is.pop();
-                        } 
-                        else {
-                            //std::cout << "Err:" << is.top().val << "\n";
-                            is.pop();
+                        if (is.empty()) {
+                            break;
                         }
+                        ++t;
+                    } else if (is.top().val == "define") {
+                        //执行
+                        _g_marco.push_back(is.top());
+                        is.pop();
+                        ++t;
+                    } else {
+                        //不是相关预处理代码
+                        //std::cout << "Err:" << is.top().val << "\n";
+                        is.pop();
+                        ++t;
                     }
                 }
                 continue;   
             }
 
             ++t;
+        }
+    }
+
+    //l3 把所有的name为marco的token type改成 marco
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ++t) {
+            if (t->type == CPP_NAME && is_in_marco(t->val)) {
+                t->type = CPP_MACRO;
+            }
         }
     }
 }
@@ -1127,9 +1146,14 @@ void ParserGroup::debug(const std::string& debug_out) {
 
 bool ParserGroup::is_in_marco(const std::string& m) {
     for (auto it=_g_marco.begin(); it != _g_marco.end(); ++it) {
-        if ((*it).val == m) {
-            return true;
+        if (!(*it).ts.empty()) {
+            if((*it).ts.front().val == m) {
+                return true;
+            }
         }
+        // if ((*it).ts == m) {
+        //     return true;
+        // }
     }
 
     return false;
