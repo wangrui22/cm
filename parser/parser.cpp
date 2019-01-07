@@ -1020,32 +1020,35 @@ void ParserGroup::extract_marco() {
                         assert(!is.top().ts.empty());
                         bool target = is.top().val == "ifdef";
                         if (target == is_in_marco(is.top().ts[0].val)) {
+                            //执行下一句
                             ++t;
                             continue;
                         } else {
+                            //执行else分支, 找else 或者 endif
                             ++t;
                             std::stack<Token> is_r;
-                            //找else 或者 endif
-                            GET_ELSE_BRANCH:                        
+
+                    GET_ELSE_BRANCH:                        
+                    
                             while(!(t->val == "else" || t->val == "endif" || t->val == "ifdef" || t->val == "ifndef")) {
                                 ++t;
                             }
                             if (is_r.empty() && t->val == "else") {
-                                //is.push(*(++t));
+                                //找到else
                                 ++t;
                                 continue;
                             } else if (is_r.empty() && t->val == "endif") {
-                                //is.push(*t);
+                                //找到终结的endif
+                                ++t;
                                 continue;
-                            } else if (t->val == "ifdef" || t->val== "ifndef") {
-                                //is_r.push(*(t++));
-                                //goto GET_ELSE_BRANCH;
-                                continue;
+                            } else if (!is_r.empty() && (t->val == "ifdef" || t->val== "ifndef")) {
+                                //还没有遇到结束else分支, 就又遇到了嵌套的条件语句(不走的)
+                                is_r.push(*(t++));
+                                goto GET_ELSE_BRANCH;
                             } else if (!is_r.empty() && t->val == "endif") {
                                 is_r.pop();
                                 ++t;
-                                //goto GET_ELSE_BRANCH;
-                                continue;
+                                goto GET_ELSE_BRANCH;
                             }
                         }
                     } else if (is.top().val == "endif"){
