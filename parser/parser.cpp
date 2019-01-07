@@ -74,7 +74,8 @@ void Reader::next_line() {
 }
 
 bool Reader::eof() const {
-    return _cur_loc > _file_str.length()-1;
+    const int len = (int)_file_str.length()-1;
+    return _cur_loc > len;
 }
 
 std::string Reader::get_string(int loc, int len) {
@@ -83,6 +84,10 @@ std::string Reader::get_string(int loc, int len) {
 }
 
 void Reader::skip_white() {
+    if (eof()) {
+        return;
+    }
+
     char c = _file_str[_cur_loc];
     if (c==' ' || c=='\t' || c=='\f' || c=='\v' || c=='\0') {
         ++_cur_loc;
@@ -235,11 +240,11 @@ static inline Token lex_identifier(char c, Reader* cpp_reader, Token& token,  in
 static inline Token lex_comment(char c, Reader* cpp_reader, Token& token, int per_status) {
     //-------------------DFA-----------------//
     //       | 0 | 1 | 2 | 3 |(4)|
-    //  /    | 1 |-1 |-1 | 4 |-1 |
+    //  /    | 1 |-1 | 2 | 4 |-1 |
     //  *    |-1 | 2 | 3 | 3 |-1 |
     // other |-1 |-1 | 2 | 2 |-1 |
-    const static char DFA[3][5] = {
-        1,-1,-1,4,-1,
+    const static char DFA[3]/*  */[5] = {
+        1,-1,2,4,-1,
         -1,2,3,3,-1,
         -1,-1,2,2,-1
     };
@@ -1029,7 +1034,7 @@ void ParserGroup::extract_marco() {
                             std::stack<Token> is_r;
 
                     GET_ELSE_BRANCH:                        
-                    
+
                             while(!(t->val == "else" || t->val == "endif" || t->val == "ifdef" || t->val == "ifndef")) {
                                 ++t;
                             }

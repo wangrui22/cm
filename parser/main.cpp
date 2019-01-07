@@ -21,8 +21,7 @@ int main(int argc, char* argv[]) {
     Util::get_all_file_recursion(argv[1], post,  h_file);
 
     std::set<std::string> post2;
-    post.insert(".cpp");
-    post.insert(".c");
+    post2.insert(".cpp");
     std::vector<std::string> c_file;
     Util::get_all_file_recursion(argv[1], post2,  c_file);
 
@@ -41,6 +40,25 @@ int main(int argc, char* argv[]) {
         parser->f2();
 
         std::string file_name = Util::get_file_name(h_file[i]);
+
+        parser_group.add_parser(file_name, parser);
+    }
+
+    for (size_t i=0; i<c_file.size(); ++i) {
+        Reader reader;
+        reader.read(c_file[i]);
+        Parser* parser = new Parser();
+        while(true) {
+            parser->push_token(parser->lex(&reader));
+            if (reader.eof()) {
+                break;
+            }
+        }
+
+        parser->f1();
+        parser->f2();
+
+        std::string file_name = Util::get_file_name(c_file[i]);
 
         parser_group.add_parser(file_name, parser);
     }
