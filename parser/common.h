@@ -109,13 +109,14 @@ struct Token {
     std::deque<Token> ts;//多遍的时候会合并到这里
 };
 
-struct FnDec {
-    std::string pre_mod;
-    std::string ret;
+struct ClassType {
     std::string name;
-    std::vector<std::string> para;
-    std::string post_mod;
+    bool is_template;
 };
+
+inline bool operator < (const ClassType& l,  const ClassType& r) {
+    l.name < r.name;
+}
 
 const int NUM_KEYWORDS = 86;
 static const char* keywords[NUM_KEYWORDS] = {

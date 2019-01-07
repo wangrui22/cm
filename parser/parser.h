@@ -47,18 +47,17 @@ public:
     void f2();
 
     //接口混淆
-    void extract_class();
-    void extract_class_fn();
-    void syntax_function();
+    // void extract_class();
+    // void extract_class_fn();
 
-    const std::set<std::string>& get_classes() const;
-    const std::map<std::string, std::set<std::string>>& get_class_fns() const;
+    // const std::set<std::string>& get_classes() const;
+    // const std::map<std::string, std::set<std::string>>& get_class_fns() const;
 
 private:
     std::deque<Token> _ts;
 
-    std::set<std::string> _class;
-    std::map<std::string, std::set<std::string>> _class_fn;
+    // std::set<std::string> _class;
+    // std::map<std::string, std::set<std::string>> _class_fn;
 };
 
 
@@ -71,6 +70,8 @@ public:
     Parser* get_parser(const std::string& file_name);
 
     void extract_marco();
+    //void extract_tempalte();
+    void extract_class();
 
     bool is_in_marco(const std::string& m);
 
@@ -78,6 +79,8 @@ public:
 
 private:
     std::vector<Token> _g_marco;//全局宏定义
+    std::set<std::string> _g_class;//全局class
+    std::set<std::string> _g_struct;//全局struct
     std::map<std::string, Parser*> _parsers;
 };
 

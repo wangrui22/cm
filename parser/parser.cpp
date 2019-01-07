@@ -828,144 +828,111 @@ void Parser::f2() {
     }
 }
 
-// std::deque<FnDec> Parser::extract_function() {
-//     std::deque<FnDec> fns;
-    
-//     bool begin = false;
-//     std::deque<Token> pre_mods;        
-//     std::deque<Token> ret;
-//     Token fn_name;
-//     std::deque<Token> paras;
-//     std::deque<Token> post_mods;
 
-//     for (auto t = _ts.begin(); t != _ts.begin(); ++t) {
-//         auto t_n = t+1;
-//         if (!begin) {
-//             if (t->val == "virtual") {
-//                 pre_mods.push_back(*t);
-//                 begin = true;
-//                 ++t;
-//             } else if (t->val == "explict") {
-//                 pre_mods.push_back(*t);
-//                 begin = true;
-//                 ++t;
-//             } else if (t_n != _ts.end() &&  t->val == "~" && t_n->val == "virtual") {
-//                 pre_mods.push_back(*t);
-//                 pre_mods.push_back(*t_n);
-//                 ++t;
-//                 ++t;
-//                 begin = true;
+// void Parser::extract_class() {
+//     _class.clear();
+//     for (auto t = _ts.begin(); t != _ts.end(); ++t) {
+//         if (t->val == "class") {
+//             //TODO 需要排除类前面跟着的修饰符
+//             auto t_n = t+1;
+//             if (t_n != _ts.end() && t_n->type == CPP_NAME) {
+//                 t_n->type = CPP_CLASS;
+//                 _class.insert(t_n->val);
 //             }
+//             ++t;
+//         } else if (t->val == "struct") {
+//             auto t_n = t+1;
+//             if (t_n != _ts.end() && t_n->type == CPP_NAME) {
+//                 t_n->type = CPP_STURCT;
+//                 _class.insert(t_n->val);
+//             }
+//             ++t;
 //         }
 //     }
-
-//     return fns;
 // }
 
-void Parser::extract_class() {
-    _class.clear();
-    for (auto t = _ts.begin(); t != _ts.end(); ++t) {
-        if (t->val == "class") {
-            //TODO 需要排除类前面跟着的修饰符
-            auto t_n = t+1;
-            if (t_n != _ts.end() && t_n->type == CPP_NAME) {
-                t_n->type = CPP_CLASS;
-                _class.insert(t_n->val);
-            }
-            ++t;
-        } else if (t->val == "struct") {
-            auto t_n = t+1;
-            if (t_n != _ts.end() && t_n->type == CPP_NAME) {
-                t_n->type = CPP_STURCT;
-                _class.insert(t_n->val);
-            }
-            ++t;
-        }
-    }
-}
+// void Parser::extract_class_fn() {
+//     _class_fn.clear();
+//     for (auto t = _ts.begin(); t != _ts.end(); ) {
+//         if (t->type == CPP_CLASS) {
 
-void Parser::extract_class_fn() {
-    _class_fn.clear();
-    for (auto t = _ts.begin(); t != _ts.end(); ) {
-        if (t->type == CPP_CLASS) {
+//             const std::string class_name = t->val;
 
-            const std::string class_name = t->val;
+//             std::stack<Token> sb;
+//             std::deque<Token>::iterator fn_begin = t;
+//             std::deque<Token>::iterator fn_end = t;
 
-            std::stack<Token> sb;
-            std::deque<Token>::iterator fn_begin = t;
-            std::deque<Token>::iterator fn_end = t;
+//             //find begin scope
+//             while(t->type != CPP_OPEN_BRACE) {
+//                 fn_begin = t+1;
+//                 ++t;
+//             }
+//             sb.push(*t);
+//             ++t;
 
-            //find begin scope
-            while(t->type != CPP_OPEN_BRACE) {
-                fn_begin = t+1;
-                ++t;
-            }
-            sb.push(*t);
-            ++t;
-
-            //find end scope
-            while(!sb.empty()) {
-                if (t->type == CPP_OPEN_BRACE) {
-                    sb.push(*t);
-                    ++t;
-                    continue;
-                }
-                if (t->type == CPP_CLOSE_BRACE && sb.top().type == CPP_OPEN_BRACE) {
-                    sb.pop();
-                    if (sb.empty()) {
-                        fn_end = t;
-                    }
-                    ++t;
-                    continue;
-                }
+//             //find end scope
+//             while(!sb.empty()) {
+//                 if (t->type == CPP_OPEN_BRACE) {
+//                     sb.push(*t);
+//                     ++t;
+//                     continue;
+//                 }
+//                 if (t->type == CPP_CLOSE_BRACE && sb.top().type == CPP_OPEN_BRACE) {
+//                     sb.pop();
+//                     if (sb.empty()) {
+//                         fn_end = t;
+//                     }
+//                     ++t;
+//                     continue;
+//                 }
                 
-                ++t;
-            }
+//                 ++t;
+//             }
 
-            //extract class function
-            //找括号组
-            std::set<std::string> fns;
-            std::stack<std::deque<Token>::iterator> sbi;
-            auto tc = fn_begin;
-            while(tc != fn_end) {
-                if (tc->val == "public") {
-                    break;
-                } else {
-                    ++tc;
-                    continue;
-                }
-            }
+//             //extract class function
+//             //找括号组
+//             std::set<std::string> fns;
+//             std::stack<std::deque<Token>::iterator> sbi;
+//             auto tc = fn_begin;
+//             while(tc != fn_end) {
+//                 if (tc->val == "public") {
+//                     break;
+//                 } else {
+//                     ++tc;
+//                     continue;
+//                 }
+//             }
 
-            for (; tc != fn_end; ) {
-                if (tc->type == CPP_OPEN_PAREN) {
-                    sbi.push(tc);
-                    ++tc;
-                    continue;
-                }
-                if (tc->type == CPP_CLOSE_PAREN && sbi.top()->type == CPP_OPEN_PAREN) {
-                    auto fend = sbi.top();
-                    sbi.pop();
-                    fns.insert((fend-1)->val);
-                    ++tc;
-                    continue;
-                }
+//             for (; tc != fn_end; ) {
+//                 if (tc->type == CPP_OPEN_PAREN) {
+//                     sbi.push(tc);
+//                     ++tc;
+//                     continue;
+//                 }
+//                 if (tc->type == CPP_CLOSE_PAREN && sbi.top()->type == CPP_OPEN_PAREN) {
+//                     auto fend = sbi.top();
+//                     sbi.pop();
+//                     fns.insert((fend-1)->val);
+//                     ++tc;
+//                     continue;
+//                 }
 
-                ++tc;
-            }
-            _class_fn[class_name] = fns;
-        }
+//                 ++tc;
+//             }
+//             _class_fn[class_name] = fns;
+//         }
 
-        ++t;
-    }
-}
+//         ++t;
+//     }
+// }
 
-const std::map<std::string, std::set<std::string>>& Parser::get_class_fns() const {
-    return _class_fn;
-}
+// const std::map<std::string, std::set<std::string>>& Parser::get_class_fns() const {
+//     return _class_fn;
+// }
 
-const std::set<std::string>& Parser::get_classes() const {
-    return _class;
-}
+// const std::set<std::string>& Parser::get_classes() const {
+//     return _class;
+// }
 
 
 ParserGroup::ParserGroup() {
@@ -1094,6 +1061,77 @@ void ParserGroup::extract_marco() {
     }
 }
 
+// void ParserGroup::extract_tempalte() {
+//     //把 template尖括号中class 和 typename 后面跟的token type设置成 CPP_TYPE
+//     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+//         Parser& parser = *it->second;
+//         std::deque<Token>& ts = parser._ts;
+//         for (auto t = ts.begin(); t != ts.end(); ) {
+//             if (t->val == "template") {
+//                 //找<
+//                 std::stack<Token> tb;
+//                 while((++t)->type != CPP_GREATER) {}
+//                 tb.push(*t);
+                
+//                 //将仅跟着class之后的Name设置成type
+
+
+
+//             }
+//         }
+//     }
+//     //把 模板类/结构体提取出来
+
+// }
+
+void ParserGroup::extract_class() {
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ++t) {
+            //找到了模板, 忽略其中所有的class
+            if (t->val == "template") {
+                //找<
+                std::stack<Token> tb;
+                while((++t)->type != CPP_GREATER) {}
+                tb.push(*t);
+                
+                //将仅跟着class之后的Name设置成type
+            }
+
+            //TODO 看除了template后的第一个关键字是否是class或者struct从而判断是不是模板类
+            if (t->val == "class") {
+                //排除类前面跟着的修饰符： 一般是宏定义 或者 是关键字
+                auto t_n = t+1;
+                while (true) {
+                    if (t_n != ts.end() && t_n->type == CPP_NAME) {
+                        t_n->type = CPP_CLASS;
+                        _g_class.insert(t_n->val);
+                        break;
+                    } else {
+                        ++t;
+                        t_n = t+1;
+                    }
+                }
+                ++t;
+            } else if (t->val == "struct") {
+                auto t_n = t+1;
+                while (true) {
+                    if (t_n != ts.end() && t_n->type == CPP_NAME) {
+                        t_n->type = CPP_STURCT;
+                        _g_struct.insert(t_n->val);
+                        break;
+                    } else {
+                        ++t;
+                        t_n = t+1;
+                    }
+                }
+                ++t;
+            }
+        }   
+    }
+}
+
 void ParserGroup::debug(const std::string& debug_out) {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
@@ -1118,38 +1156,57 @@ void ParserGroup::debug(const std::string& debug_out) {
             }
         }
 
-        out << "\n//----------------------------------------//\n";
-        const std::set<std::string> classes = parser.get_classes();
-        for (auto it=classes.begin(); it!=classes.end(); ++it) {
-            out << "class: " << *it << std::endl;
-        }
+        // out << "\n//----------------------------------------//\n";
+        // const std::set<std::string> classes = parser.get_classes();
+        // for (auto it=classes.begin(); it!=classes.end(); ++it) {
+        //     out << "class: " << *it << std::endl;
+        // }
 
-        out << "\n//----------------------------------------//\n";
-        const std::map<std::string, std::set<std::string>> class_fns = parser.get_class_fns();
-        for (auto it=class_fns.begin(); it!=class_fns.end(); ++it) {
-            for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
-                out << it->first << "::" << *it2 << std::endl;
-            }
-        }
+        // out << "\n//----------------------------------------//\n";
+        // const std::map<std::string, std::set<std::string>> class_fns = parser.get_class_fns();
+        // for (auto it=class_fns.begin(); it!=class_fns.end(); ++it) {
+        //     for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
+        //         out << it->first << "::" << *it2 << std::endl;
+        //     }
+        // }
 
         out.close();
     }
 
     //print all marco
-    const std::string f = debug_out+"/global_marco";
-    std::ofstream out(f, std::ios::out);
-    if (!out.is_open()) {
-        std::cerr << "err to open: " << f << "\n";
-        return;
-    }
-    for (auto it = _g_marco.begin(); it != _g_marco.end(); ++it) { 
-        out << (*it).val << ": ";
-        for (auto it2 = (*it).ts.begin(); it2 != (*it).ts.end(); ++it2) {
-           out << (*it2).val << " "; 
+    {
+        const std::string f = debug_out+"/global_marco";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            return;
         }
-        out << std::endl;
+        for (auto it = _g_marco.begin(); it != _g_marco.end(); ++it) { 
+            out << (*it).val << ": ";
+            for (auto it2 = (*it).ts.begin(); it2 != (*it).ts.end(); ++it2) {
+            out << (*it2).val << " "; 
+            }
+            out << std::endl;
+        }
+        out.close();
     }
-    out.close();
+
+    //print all class and struct
+    {
+        const std::string f = debug_out+"/global_class";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            return;
+        }
+        for (auto it = _g_class.begin(); it != _g_class.end(); ++it) { 
+            out << "class : " << *it << "\n";
+        }
+        for (auto it = _g_struct.begin(); it != _g_struct.end(); ++it) { 
+            out << "struct : " << *it << "\n";
+        }
+        out.close();
+    }
 }
 
 bool ParserGroup::is_in_marco(const std::string& m) {
