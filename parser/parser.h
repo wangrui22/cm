@@ -73,14 +73,15 @@ public:
     //void extract_tempalte();
     void extract_class();
 
-    bool is_in_marco(const std::string& m);
-
     void debug(const std::string& debug_out);
 
 private:
+    bool is_in_marco(const std::string& m);
+    bool is_in_class_stuct(const std::string& name, bool& tm);
+private:
     std::vector<Token> _g_marco;//全局宏定义
-    std::set<std::string> _g_class;//全局class
-    std::set<std::string> _g_struct;//全局struct
+    std::set<ClassType> _g_class;//全局class
+    std::set<ClassType> _g_struct;//全局struct
     std::map<std::string, Parser*> _parsers;
 };
 

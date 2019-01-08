@@ -1069,9 +1069,9 @@ void ParserGroup::extract_marco() {
 //         for (auto t = ts.begin(); t != ts.end(); ) {
 //             if (t->val == "template") {
 //                 //找<
-//                 std::stack<Token> tb;
+//                 std::stack<Token> st;
 //                 while((++t)->type != CPP_GREATER) {}
-//                 tb.push(*t);
+//                 st.push(*t);
                 
 //                 //将仅跟着class之后的Name设置成type
 
@@ -1088,38 +1088,89 @@ void ParserGroup::extract_class() {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
         std::deque<Token>& ts = parser._ts;
-        for (auto t = ts.begin(); t != ts.end(); ++t) {
+        bool next_class_template = false;
+        for (auto t = ts.begin(); t != ts.end(); ) {
             //找到了模板, 忽略其中所有的class
             if (t->val == "template") {
                 //找<
-                std::stack<Token> tb;
-                while((++t)->type != CPP_GREATER) {}
-                tb.push(*t);
-                
-                //将仅跟着class之后的Name设置成type
-            }
+                std::stack<Token> st;
+                ++t;
+                while(t->type != CPP_LESS && t != ts.end()) {
+                    ++t;
+                }
+                if (t == ts.end()) {
+                    continue;
+                }
+                st.push(*t);
+                ++t;
+                //找<>组合
+                while(!st.empty() && t!= ts.end()) {
+                    if (t->type == CPP_LESS) {
+                        st.push(*t);
+                    }
+                    else if (t->type == CPP_GREATER && st.top().type == CPP_LESS) {
+                        st.pop();
+                    }
+                    ++t;
+                }
 
-            //TODO 看除了template后的第一个关键字是否是class或者struct从而判断是不是模板类
-            if (t->val == "class") {
+                if (t == ts.end()) {
+                    continue;
+                }
+
+                next_class_template = (t->val == "class" || t->val == "struct");
+            } else if (t->val == "class") {
+                //TODO 看除了template后的第一个关键字是否是class或者struct从而判断是不是模板类
                 //排除类前面跟着的修饰符： 一般是宏定义 或者 是关键字
                 auto t_n = t+1;
+                std::string c_name;
                 while (true) {
                     if (t_n != ts.end() && t_n->type == CPP_NAME) {
                         t_n->type = CPP_CLASS;
-                        _g_class.insert(t_n->val);
+                        c_name = t_n->val;
+                        if (_g_class.find({t_n->val, false, next_class_template, ""}) == _g_class.end()) {
+                            _g_class.insert({t_n->val, false, next_class_template, ""});
+                        }
+                        next_class_template = false;
                         break;
                     } else {
                         ++t;
                         t_n = t+1;
                     }
                 }
-                ++t;
+                //找到class
+                //查找有没有继承关系 { 或者 ; 之前有没有 : 
+                
+                while(!(t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON || t->type == CPP_COLON) && t!=ts.end()) {
+                    ++t;
+                }
+                if (t == ts.end()) {
+                    continue;
+                }
+
+                if (t->type == CPP_COLON && (t+1)!=ts.end() && (t+1)->val == "public") {
+                    //找到继承的关系
+                    if ((t+2)!=ts.end() && (t+3)!=ts.end() && (t+3)!=ts.end() &&
+                        (t+2)->val == "std" && (t+3)->type == CPP_SCOPE && (t+4)->val == "enable_shared_from_this") {
+                        std::cout << "catch enable_shared_from_this\n";
+                    } else if ((t+2)!=ts.end() && ((t+2)->type == CPP_NAME || (t+2)->type == CPP_CLASS || (t+2)->type == CPP_STURCT)) {
+                        std::set<ClassType>::iterator t_c = _g_class.find({c_name, false, false, ""});
+                        if (t_c != _g_class.end()) {
+                            _g_class.erase(t_c);
+                        }
+                        _g_class.insert({t_n->val, false, next_class_template, (t+2)->val});
+                        std::cout << "catch father class\n";
+                    }
+                                       
+                }
+
             } else if (t->val == "struct") {
                 auto t_n = t+1;
                 while (true) {
                     if (t_n != ts.end() && t_n->type == CPP_NAME) {
                         t_n->type = CPP_STURCT;
-                        _g_struct.insert(t_n->val);
+                        _g_struct.insert({t_n->val, true, next_class_template, ""});
+                        next_class_template = false;
                         break;
                     } else {
                         ++t;
@@ -1127,9 +1178,63 @@ void ParserGroup::extract_class() {
                     }
                 }
                 ++t;
+            } else {
+                ++t;
             }
         }   
     }
+
+    //解析class struct type, 注意这一步会把构造函数标记为type
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            bool tm = false;
+            if (t->type == CPP_NAME && is_in_class_stuct(t->val, tm)) {
+                t->type = CPP_TYPE;
+                if (!tm) {
+                    ++t;
+                    continue;
+                } else {
+                    //合并模板类型的类或者结构体
+                    Token& c_t = *t;
+                    if ((t+1) != ts.end() && (t+1)->type == CPP_LESS) {
+                        std::stack<Token> st; 
+                        st.push(*(t+1));  
+                        c_t.ts.push_back(*(t+1));
+                        t = ts.erase(t+1);
+                        while(!st.empty() && t != ts.end()) {
+                            if (t->type == CPP_LESS) {
+                                st.push(*t);
+                            }
+                            else if (t->type == CPP_GREATER && st.top().type == CPP_LESS) {
+                                st.pop();
+                            }
+                            c_t.ts.push_back(*t);
+                            t = ts.erase(t);
+                        }
+                    } else {
+                        t->type = CPP_TYPE;
+                        ++t;
+                        continue;
+                    }
+                }
+            } else {
+                ++t;
+            }
+        }
+    }
+
+    //分析typedef
+    
+
+    //分析template的类型
+
+
+    //引入stl 类型?
+
+    //引入容器
+
 }
 
 void ParserGroup::debug(const std::string& debug_out) {
@@ -1200,10 +1305,24 @@ void ParserGroup::debug(const std::string& debug_out) {
             return;
         }
         for (auto it = _g_class.begin(); it != _g_class.end(); ++it) { 
-            out << "class : " << *it << "\n";
+            if (it->is_template) {
+                out << "class<> ";    
+            } else {
+                out << "class "; 
+            }
+            out << it->name;
+            if (!it->father.empty()) {
+                out << " public : " << it->father;
+            }
+            out << "\n";
         }
         for (auto it = _g_struct.begin(); it != _g_struct.end(); ++it) { 
-            out << "struct : " << *it << "\n";
+            if (it->is_template) {
+                out << "struct<>: ";    
+            } else {
+                out << "struct : "; 
+            }
+            out << it->name << "\n";
         }
         out.close();
     }
@@ -1223,3 +1342,96 @@ bool ParserGroup::is_in_marco(const std::string& m) {
 
     return false;
 }
+
+bool ParserGroup::is_in_class_stuct(const std::string& name, bool& tm) {
+    for (auto it=_g_class.begin(); it != _g_class.end(); ++it) {
+        if (it->name == name) {
+            tm = it->is_template;
+            return true;
+        }
+    }
+
+    for (auto it=_g_struct.begin(); it != _g_struct.end(); ++it) {
+        if (it->name == name) {
+            tm = it->is_template;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// void ParserGroup::extract_class_function() {
+//     _class_fn.clear();
+//     for (auto t = _ts.begin(); t != _ts.end(); ) {
+//         if (t->type == CPP_CLASS) {
+
+//             const std::string class_name = t->val;
+
+//             std::stack<Token> sb;
+//             std::deque<Token>::iterator fn_begin = t;
+//             std::deque<Token>::iterator fn_end = t;
+
+//             //find begin scope
+//             while(t->type != CPP_OPEN_BRACE) {
+//                 fn_begin = t+1;
+//                 ++t;
+//             }
+//             sb.push(*t);
+//             ++t;
+
+//             //find end scope
+//             while(!sb.empty()) {
+//                 if (t->type == CPP_OPEN_BRACE) {
+//                     sb.push(*t);
+//                     ++t;
+//                     continue;
+//                 }
+//                 if (t->type == CPP_CLOSE_BRACE && sb.top().type == CPP_OPEN_BRACE) {
+//                     sb.pop();
+//                     if (sb.empty()) {
+//                         fn_end = t;
+//                     }
+//                     ++t;
+//                     continue;
+//                 }
+                
+//                 ++t;
+//             }
+
+//             //extract class function
+//             //找括号组
+//             std::set<std::string> fns;
+//             std::stack<std::deque<Token>::iterator> sbi;
+//             auto tc = fn_begin;
+//             while(tc != fn_end) {
+//                 if (tc->val == "public") {
+//                     break;
+//                 } else {
+//                     ++tc;
+//                     continue;
+//                 }
+//             }
+
+//             for (; tc != fn_end; ) {
+//                 if (tc->type == CPP_OPEN_PAREN) {
+//                     sbi.push(tc);
+//                     ++tc;
+//                     continue;
+//                 }
+//                 if (tc->type == CPP_CLOSE_PAREN && sbi.top()->type == CPP_OPEN_PAREN) {
+//                     auto fend = sbi.top();
+//                     sbi.pop();
+//                     fns.insert((fend-1)->val);
+//                     ++tc;
+//                     continue;
+//                 }
+
+//                 ++tc;
+//             }
+//             _class_fn[class_name] = fns;
+//         }
+
+//         ++t;
+//     }
+// }

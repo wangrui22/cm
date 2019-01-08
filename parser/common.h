@@ -100,18 +100,39 @@ enum TokenType {
     CPP_BR, //换行
     CPP_CONNECTOR, //连接符号 '\\'  /
     CPP_PREPROCESSOR, //预处理 和#连接的内容
+    CPP_FUNCTION, //过程
 };
 
 struct Token {
     TokenType type;
     std::string val;
     int loc;
-    std::deque<Token> ts;//多遍的时候会合并到这里
+    //多遍的时候会合并到这里
+    //1 预处理语句 存在#的token中, ts后面是预处理语句的token
+    //2 类型 存储的主体类型, 具体的类型存储在token中, 如模板类型, 容器等
+    std::deque<Token> ts;
+
+    //token 的主体
+    //type 类型: 如果是空则是全局的
+    //          如果有值则作用域为subject(这里是class名)
+    //              主要有两种情况:1 class内部定义的typedef 2 模板函数的模板类型
+    //function 类型: 如果是空则是全局的
+    //               如果有值则作用域为subject(这里是class名)
+
+    std::string subject;
 };
 
 struct ClassType {
     std::string name;
+    bool is_struct;
     bool is_template;
+    std::string father;
+};
+
+struct ClassAttribute {
+    int type;//0 模板类型 1 定义的类型 2  
+    std::string val;
+    Token t;
 };
 
 inline bool operator < (const ClassType& l,  const ClassType& r) {
