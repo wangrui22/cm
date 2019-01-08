@@ -82,6 +82,7 @@ private:
     std::vector<Token> _g_marco;//全局宏定义
     std::set<ClassType> _g_class;//全局class
     std::set<ClassType> _g_struct;//全局struct
+    std::set<ClassFunction> _g_class_fn;//全局的class的成员函数
     std::map<std::string, Parser*> _parsers;
 };
 

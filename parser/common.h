@@ -100,7 +100,7 @@ enum TokenType {
     CPP_BR, //换行
     CPP_CONNECTOR, //连接符号 '\\'  /
     CPP_PREPROCESSOR, //预处理 和#连接的内容
-    CPP_FUNCTION, //过程
+    CPP_FUNCTION, //过程, 目前只针对类成员函数
 };
 
 struct Token {
@@ -129,14 +129,18 @@ struct ClassType {
     std::string father;
 };
 
-struct ClassAttribute {
-    int type;//0 模板类型 1 定义的类型 2  
-    std::string val;
-    Token t;
+struct ClassFunction {
+    int access;//0 public 1 protected 2 private
+    std::string c_name;
+    std::string fn_name;//function name
 };
 
 inline bool operator < (const ClassType& l,  const ClassType& r) {
     l.name < r.name;
+}
+
+inline bool operator < (const ClassFunction& l,  const ClassFunction& r) {
+    l.c_name+"::"+l.fn_name < r.c_name+"::"+r.fn_name;
 }
 
 const int NUM_KEYWORDS = 86;
