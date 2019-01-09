@@ -1187,7 +1187,7 @@ CLASS_SCOPE:
                         //common function
                         std::function<void()> jump_brace = [&t, &ts]() {
                             std::stack<Token> s_de;
-                            while (t->type == CPP_OPEN_PAREN && t != ts.end()) {
+                            while (t->type != CPP_OPEN_PAREN && t != ts.end()) {
                                 ++t;
                             }
                             if (t == ts.end()) {
@@ -1234,37 +1234,15 @@ CLASS_SCOPE:
                         } else {
                             //找括号组
                             //需要避开构造函数的初始化列表
-                            auto t_n = ++t;
+                            auto t_n = t+1;
                             if (t->val == cur_c_name && (t-1)->type == CPP_COMPL) {
                                 //析构函数
                                 t->type = CPP_FUNCTION;
-                                
+                                _g_class_fn.insert({access, cur_c_name, "~"+t->val});
 
                                 //跳过函数的括号组
-                                // (
                                 ++t;
                                 jump_brace();
-                                // std::stack<Token> s_de;
-                                // while (t->type == CPP_OPEN_PAREN && t != ts.end()) {
-                                //     ++t;
-                                // }
-                                // if (t == ts.end()) {
-                                //     continue;
-                                // }
-                                // s_de.push(*t);
-                                // // )
-                                // ++t;
-                                // while (!s_de.empty()) {
-                                //     if (t->type == CPP_CLOSE_PAREN && s_de.top().type == CPP_OPEN_PAREN) {
-                                //         s_de.pop();
-                                //         ++t;
-                                //     } else if (t->type == CPP_OPEN_PAREN) {
-                                //         s_de.push(*t);
-                                //         ++t;
-                                //     } else {
-                                //         ++t;
-                                //     }
-                                // }
 
                                 continue;
                             } else if (t->val == cur_c_name && t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
@@ -1318,7 +1296,7 @@ CLASS_SCOPE:
                                         continue;
                                     }
                                 }
-                            } else if(t->type == CPP_NAME && t_n != ts.end() && t_n->type == CPP_OPEN_BRACE) {
+                            } else if(t->type == CPP_NAME && t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
                                 //可能是成员函数
                                 auto t_may_c = t;
                                 ++t;
@@ -1330,6 +1308,8 @@ CLASS_SCOPE:
                                     //不是成员函数
                                     continue;
                                 }
+                            } else {
+                                ++t;
                             }
                         }
                     }
