@@ -81,8 +81,7 @@ private:
     bool is_in_class_stuct(const std::string& name, bool& tm);
 private:
     std::vector<Token> _g_marco;//全局宏定义
-    std::set<ClassType> _g_class;//全局class
-    std::set<ClassType> _g_struct;//全局struct
+    std::set<ClassType> _g_class;//全局class struct
     std::set<ClassFunction> _g_class_fn;//全局的class的成员函数
     std::set<std::string> _g_enum;//全局的枚举
     std::map<std::string, Parser*> _parsers;
