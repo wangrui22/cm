@@ -71,6 +71,7 @@ public:
 
     void extract_marco();
     void extract_enum();
+    void extract_extern_type();
     //void extract_tempalte();
     void extract_class();
 
@@ -78,13 +79,16 @@ public:
 
 private:
     bool is_in_marco(const std::string& m);
-    bool is_in_class_stuct(const std::string& name, bool& tm);
+    bool is_in_class_struct(const std::string& name, bool& tm);
 private:
     std::vector<Token> _g_marco;//全局宏定义
     std::set<ClassType> _g_class;//全局class struct
     std::set<ClassFunction> _g_class_fn;//全局的class的成员函数
     std::set<std::string> _g_enum;//全局的枚举
     std::map<std::string, Parser*> _parsers;
+
+    std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来
+    
 };
 
 #endif

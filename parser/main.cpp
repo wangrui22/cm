@@ -65,6 +65,7 @@ int main(int argc, char* argv[]) {
 
     parser_group.extract_enum();
     parser_group.extract_marco();
+    parser_group.extract_extern_type();
     parser_group.extract_class();
     parser_group.debug(argv[2]);
 

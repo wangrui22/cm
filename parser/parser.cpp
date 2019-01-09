@@ -1396,7 +1396,7 @@ CLASS_SCOPE:
         std::deque<Token>& ts = parser._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             bool tm = false;
-            if (t->type == CPP_NAME && is_in_class_stuct(t->val, tm)) {
+            if (t->type == CPP_NAME && is_in_class_struct(t->val, tm)) {
                 t->type = CPP_TYPE;
                 if (!tm) {
                     ++t;
@@ -1431,6 +1431,117 @@ CLASS_SCOPE:
         }
     }
 
+    //抽取typedef的类型(注意作用域)
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        std::string cur_c_name;
+
+        for (auto t = ts.begin(); t != ts.end(); ) {
+
+            //---------------------------------------------------------//
+            //common function
+            std::function<void()> typedef_analyze = [this, &t, &ts, &cur_c_name]() {
+                Token td;
+                td = *t;
+                td.ts.clear();
+                ++t;
+                while(!(t->type == CPP_NAME && (t+1)!=ts.end() && (t+1)->type == CPP_SEMICOLON)) {
+                    td.ts.push_back(*t);
+                    ++t;
+                }
+                t->type = CPP_TYPE;
+                td.ts.push_back(*t);
+                td.val = t->val;
+                td.subject = cur_c_name;
+                _g_typedefs.push_back(td);
+                ++t;
+            };
+
+            if (t->type == CPP_CLASS) {
+                cur_c_name = t->val;
+            } else if (t->type == CPP_STURCT) {
+                cur_c_name = t->val;
+            } else if (t->type == CPP_CLASS_BEGIN) {
+                ++t;
+                while(t->type != CPP_CLASS_END) {
+                    if (t->val == "typedef") {
+                        typedef_analyze();
+                        continue;
+                    }
+                    ++t;
+                }
+                cur_c_name = "";
+                
+            } else if (t->type == CPP_STRUCT_BEGIN) {
+                ++t;
+                while(t->type != CPP_STRUCT_END) {
+                    if (t->val == "typedef") {
+                        typedef_analyze();
+                        continue;
+                    }
+                    ++t;
+                }
+                cur_c_name = "";
+
+            } else if (t->val == "typedef") {
+                typedef_analyze();
+                continue;
+            } 
+
+            ++t;
+        }
+    }
+
+    //抽取stl的类型
+
+    //抽取类成员函数的ret
+
+    //分析类的成员变量
+    
+
+
+    //分析类成员变量
+    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+    //     Parser& parser = *it->second;
+    //     std::deque<Token>& ts = parser._ts;
+    //     std::string cur_c_name;
+    //     std::string cur_s_name;
+    //     for (auto t = ts.begin(); t != ts.end(); ) {
+    //         if (t->type == CPP_CLASS) {
+    //             cur_c_name = t->val;
+    //             cur_s_name = "";
+    //         } else if (t->type == CPP_STURCT) {
+    //             cur_s_name = t->val;
+    //             cur_c_name = "";
+    //         } else if (t->type == CPP_CLASS_BEGIN) {
+    //             //分析class
+                
+                
+
+                
+    //         } else if (t->type == CPP_STRUCT_BEGIN) {
+    //             //分析struct
+
+
+    //         } else {
+    //             ++t;
+    //         }
+    //     }
+    // }
+
+    //分析typedef
+    
+
+    //分析template的类型
+
+    //引入stl 类型?
+
+    //引入容器
+
+}
+
+void ParserGroup::extract_extern_type() {
     //抽取std boost类型
     //TODO 这里可以用配置文件来做, 不仅仅是std boost还可以是其他的三方模块
     ScopeType std_scope;
@@ -1533,48 +1644,6 @@ CLASS_SCOPE:
             ++t;
         }
     }
-
-    //抽取typedef
-
-
-    //分析类成员变量
-    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-    //     Parser& parser = *it->second;
-    //     std::deque<Token>& ts = parser._ts;
-    //     std::string cur_c_name;
-    //     std::string cur_s_name;
-    //     for (auto t = ts.begin(); t != ts.end(); ) {
-    //         if (t->type == CPP_CLASS) {
-    //             cur_c_name = t->val;
-    //             cur_s_name = "";
-    //         } else if (t->type == CPP_STURCT) {
-    //             cur_s_name = t->val;
-    //             cur_c_name = "";
-    //         } else if (t->type == CPP_CLASS_BEGIN) {
-    //             //分析class
-                
-                
-
-                
-    //         } else if (t->type == CPP_STRUCT_BEGIN) {
-    //             //分析struct
-
-
-    //         } else {
-    //             ++t;
-    //         }
-    //     }
-    // }
-
-    //分析typedef
-    
-
-    //分析template的类型
-
-    //引入stl 类型?
-
-    //引入容器
-
 }
 
 void ParserGroup::debug(const std::string& debug_out) {
@@ -1691,6 +1760,28 @@ void ParserGroup::debug(const std::string& debug_out) {
         }
         out.close();
     }
+
+    //print all typedef 
+    {
+        const std::string f = debug_out+"/global_typedef";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            return;
+        }
+        for (auto it = _g_typedefs.begin(); it != _g_typedefs.end(); ++it) {
+            Token& t = *it;
+            if (!t.subject.empty()) {
+                out << t.subject << "::";    
+            }
+            out << t.val << "\t";
+            for (auto it2 = t.ts.begin(); it2 != t.ts.end(); ++it2) {
+                out << it2->val << " ";
+            }
+            out << std::endl;
+        }
+        out.close();
+    }
 }
 
 bool ParserGroup::is_in_marco(const std::string& m) {
@@ -1708,7 +1799,7 @@ bool ParserGroup::is_in_marco(const std::string& m) {
     return false;
 }
 
-bool ParserGroup::is_in_class_stuct(const std::string& name, bool& tm) {
+bool ParserGroup::is_in_class_struct(const std::string& name, bool& tm) {
     for (auto it=_g_class.begin(); it != _g_class.end(); ++it) {
         if (it->name == name) {
             tm = it->is_template;
