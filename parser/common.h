@@ -101,6 +101,7 @@ enum TokenType {
     CPP_CONNECTOR, //连接符号 '\\'  /
     CPP_PREPROCESSOR, //预处理 和#连接的内容
     CPP_FUNCTION, //过程, 目前只针对类成员函数
+    CPP_ENUM,//枚举
 };
 
 struct Token {
@@ -133,6 +134,7 @@ struct ClassFunction {
     int access;//0 public 1 protected 2 private
     std::string c_name;
     std::string fn_name;//function name
+    std::deque<Token> rets;//return tokens
 };
 
 inline bool operator < (const ClassType& l,  const ClassType& r) {

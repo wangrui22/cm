@@ -63,6 +63,7 @@ int main(int argc, char* argv[]) {
         parser_group.add_parser(file_name, parser);
     }
 
+    parser_group.extract_enum();
     parser_group.extract_marco();
     parser_group.extract_class();
     parser_group.debug(argv[2]);

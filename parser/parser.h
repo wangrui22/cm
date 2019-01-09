@@ -70,6 +70,7 @@ public:
     Parser* get_parser(const std::string& file_name);
 
     void extract_marco();
+    void extract_enum();
     //void extract_tempalte();
     void extract_class();
 
@@ -83,6 +84,7 @@ private:
     std::set<ClassType> _g_class;//全局class
     std::set<ClassType> _g_struct;//全局struct
     std::set<ClassFunction> _g_class_fn;//全局的class的成员函数
+    std::set<std::string> _g_enum;//全局的枚举
     std::map<std::string, Parser*> _parsers;
 };
 
