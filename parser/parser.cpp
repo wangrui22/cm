@@ -1138,6 +1138,17 @@ void ParserGroup::extract_class() {
                 //TODO 看除了template后的第一个关键字是否是class或者struct从而判断是不是模板类
                 //排除类前面跟着的修饰符： 一般是宏定义 或者 是关键字
                 auto t_n = t+1;
+
+                //略过类中类
+                auto t_nn = t+2;
+                if (t_nn == ts.end()) {
+                    continue;
+                } else if (t_nn->type == CPP_SCOPE) {
+                    ++t;
+                    continue;
+                }
+
+
                 std::string cur_c_name;
                 while (true) {
                     if (t_n != ts.end() && t_n->type == CPP_NAME) {
@@ -1370,6 +1381,16 @@ CLASS_SCOPE:
 
             } else if (t->val == "struct") {
                 auto t_n = t+1;
+
+                //略过类中结构体
+                auto t_nn = t+2;
+                if (t_nn == ts.end()) {
+                    continue;
+                } else if (t_nn->type == CPP_SCOPE) {
+                    ++t;
+                    continue;
+                }
+
                 bool declaration = false;
                 while (true) {
                     if (t_n != ts.end() && t_n->type == CPP_NAME) {
@@ -1460,7 +1481,9 @@ CLASS_SCOPE:
     // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
     //     Parser& parser = *it->second;
     //     std::deque<Token>& ts = parser._ts;
+    //     std::string cur_c_name;
     //     for (auto t = ts.begin(); t != ts.end(); ) {
+    //         if (t->type == "class")
 
 
     //     }
