@@ -1432,6 +1432,7 @@ CLASS_SCOPE:
     }
 
     //抽取std boost类型
+    //TODO 这里可以用配置文件来做, 不仅仅是std boost还可以是其他的三方模块
     ScopeType std_scope;
     std_scope.scope = "std";
     std_scope.types.insert("string");
@@ -1442,11 +1443,13 @@ CLASS_SCOPE:
     boost_scope.scope = "boost";
     boost_scope.types.insert("thread");
     boost_scope.types.insert("mutex");
+    boost_scope.types.insert("condition");
+    boost_scope.types.insert("unique_lock");
 
-    ScopeType boost_thread;
-    boost_thread.scope = "mutex";
-    boost_thread.types.insert("scoped_lock");
-    boost_scope.sub_scope.insert(boost_thread);
+    ScopeType boost_mutex;
+    boost_mutex.scope = "mutex";
+    boost_mutex.types.insert("scoped_lock");
+    boost_scope.sub_scope.insert(boost_mutex);
 
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
@@ -1455,14 +1458,15 @@ CLASS_SCOPE:
 
             //---------------------------------------------------------//
             //common function
-            std::function<void(const ScopeType&)> greedy_scope_analyze = [&t, &ts](const ScopeType& scope_type) {
+            std::function<void(const ScopeType&, const std::string&)> greedy_scope_analyze = [&t, &ts](const ScopeType& scope_type, const std::string& scope_root) {
                 TokenType to_be_type = CPP_NAME;
                 const ScopeType* last_scope = &scope_type;
-                std::deque<Token> ts_to_be_type; 
+                std::deque<Token> ts_to_be_type;
 
     SCOPE_:
                 auto t_n = t+1;
                 auto t_nn = t+2;
+                auto t_nnn = t+3;
                 if (t_n == ts.end() || t_nn == ts.end()) {
                     std::cerr << "std scope err\n";
                     ++t;
@@ -1471,30 +1475,37 @@ CLASS_SCOPE:
 
                 if (t_n->type == CPP_SCOPE) {
                     auto it_sub_scope = last_scope->sub_scope.find({t_nn->val, std::set<std::string>(), std::set<ScopeType>()});
-                    if (it_sub_scope != last_scope->sub_scope.end()) {
-                        //greedy to deep
+                    auto it_type = last_scope->types.find(t_nn->val);
+
+                    if (it_sub_scope != last_scope->sub_scope.end() && it_type != last_scope->types.end() && t_nnn != ts.end() && t_nnn->type == CPP_SCOPE) {
                         ts_to_be_type.push_back(*t_n);//::
                         ts_to_be_type.push_back(*t_nn);//type
-                        t+=3;
+                        t+=2;
 
                         last_scope = &(*it_sub_scope);
 
-                    } else if (last_scope->types.find(t_nn->val) != last_scope->types.end()) {
+                    } else if (it_type != last_scope->types.end()) {
                         //end 
                         to_be_type = CPP_TYPE;
                         ts_to_be_type.push_back(*t_n);//::
                         ts_to_be_type.push_back(*t_nn);//type
                         t+=3;
+                    } else if (it_sub_scope != last_scope->sub_scope.end()) {
+                        ts_to_be_type.push_back(*t_n);//::
+                        ts_to_be_type.push_back(*t_nn);//type
+                        t+=2;
+
+                        last_scope = &(*it_sub_scope);
                     } else {
                         //std function
-                        std::cout << "std function: " << t_nn->val << std::endl;
+                        std::cout << scope_root << " function: " << t_nn->val << std::endl;
                         ++t;
                         return;
                     } 
                     goto SCOPE_;
                 } else if (!ts_to_be_type.empty() && to_be_type == CPP_TYPE) {
                     t -= (ts_to_be_type.size()+1);
-                    assert(t->val == "std");
+                    assert(t->val == scope_root);
                     t->ts = ts_to_be_type;
                     t->type = CPP_TYPE;
                     ++t;
@@ -1514,82 +1525,10 @@ CLASS_SCOPE:
 
             //抽取所有的std的类型
             if (t->val == "std") {
-                greedy_scope_analyze(std_scope);
-    //             TokenType to_be_type = CPP_NAME;
-    //             const ScopeType* last_scope = &std_scope;
-    //             std::deque<Token> ts_to_be_type; 
-
-    // STD_SCOPE:
-    //             auto t_n = t+1;
-    //             auto t_nn = t+2;
-    //             if (t_n == ts.end() || t_nn == ts.end()) {
-    //                 std::cerr << "std scope err\n";
-    //                 ++t;
-    //                 continue;
-    //             }
-
-    //             if (t_n->type == CPP_SCOPE) {
-    //                 auto it_sub_scope = last_scope->sub_scope.find({t_nn->val, std::set<std::string>(), std::set<ScopeType>()});
-    //                 if (it_sub_scope != last_scope->sub_scope.end()) {
-    //                     //greedy to deep
-    //                     ts_to_be_type.push_back(*t_n);//::
-    //                     ts_to_be_type.push_back(*t_nn);//type
-    //                     t+=3;
-
-    //                     last_scope = &(*it_sub_scope);
-
-    //                 } else if (last_scope->types.find(t_nn->val) != last_scope->types.end()) {
-    //                     //end 
-    //                     to_be_type = CPP_TYPE;
-    //                     ts_to_be_type.push_back(*t_n);//::
-    //                     ts_to_be_type.push_back(*t_nn);//type
-    //                     t+=3;
-    //                 } else {
-    //                     //std function
-    //                     std::cout << "std function: " << t_nn->val << std::endl;
-    //                     ++t;
-    //                     continue;
-    //                 } 
-    //                 goto STD_SCOPE;
-    //             } else if (!ts_to_be_type.empty() && to_be_type == CPP_TYPE) {
-    //                 t -= (ts_to_be_type.size()+1);
-    //                 assert(t->val == "std");
-    //                 t->ts = ts_to_be_type;
-    //                 t->type = CPP_TYPE;
-    //                 ++t;
-    //                 while(!ts_to_be_type.empty()) {
-    //                     ts_to_be_type.pop_back();
-    //                     t = ts.erase(t);
-    //                 }
-    //                 continue;
-    //             } else {
-    //                 std::cerr << "err here.\n";
-    //             }
-
-    //             ++t;
-    //             continue;
-            } 
-            // else if (t->val == "boost") {
-            //     auto t_n = t+1;
-            //     auto t_nn = t+2;
-            //     if (t_n == ts.end() || t_nn == ts.end()) {
-            //         ++t;
-            //         continue;
-            //     }
-
-            //     if (t_n->type == CPP_SCOPE && t_nn->val == "thread") {
-            //         t->type = CPP_TYPE;
-            //         t->ts.push_back(*t_n);
-            //         t->ts.push_back(*t_nn);
-            //         ++t;
-            //         t = ts.erase(t);
-            //         t = ts.erase(t);
-            //         continue;
-            //     }
-
-            //     ++t;
-            //     continue;
-            // }
+                greedy_scope_analyze(std_scope, "std");
+            } else if (t->val == "boost") {
+                greedy_scope_analyze(boost_scope, "boost");
+            }
 
             ++t;
         }
