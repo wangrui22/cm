@@ -141,6 +141,17 @@ struct ClassFunction {
     std::deque<Token> rets;//return tokens
 };
 
+//由namespace 或者 struct/class中定义
+struct ScopeType {
+    std::string scope;
+    std::set<std::string> types;
+    std::set<ScopeType> sub_scope;
+};
+
+inline bool operator < (const ScopeType& l,  const ScopeType& r) {
+    l.scope < r.scope;
+}
+
 inline bool operator < (const ClassType& l,  const ClassType& r) {
     l.name < r.name;
 }
