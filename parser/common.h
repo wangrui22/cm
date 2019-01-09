@@ -102,6 +102,10 @@ enum TokenType {
     CPP_PREPROCESSOR, //预处理 和#连接的内容
     CPP_FUNCTION, //过程, 目前只针对类成员函数
     CPP_ENUM,//枚举
+    CPP_CLASS_BEGIN,// class 开始的 {
+    CPP_CLASS_END,// class 结束的 {
+    CPP_STRUCT_BEGIN,//struct 开始的 {
+    CPP_STRUCT_END,//struct 结束的 }
 };
 
 struct Token {
@@ -468,6 +472,18 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             break;
         case CPP_FUNCTION:
             out << "function";
+            break;
+        case CPP_CLASS_BEGIN:
+            out << "class begin";
+            break;
+        case CPP_CLASS_END:
+            out << "class end";
+            break;
+        case CPP_STRUCT_BEGIN:
+            out << "struct begin";
+            break;
+        case CPP_STRUCT_END:
+            out << "struct end";
             break;
         default:
             out << "INVALID";

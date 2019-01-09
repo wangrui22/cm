@@ -1194,6 +1194,7 @@ CLASS_SCOPE:
                     //找class定义的作用域
                     std::stack<Token> st;
                     st.push(*t);
+                    t->type = CPP_CLASS_BEGIN;
                     ++t;
 
                     while(!st.empty() && t != ts.end()) {
@@ -1248,7 +1249,7 @@ CLASS_SCOPE:
                         // if (it->first =="mi_ray_caster.h" && t->val == "set_mask_label_level") {
                         //     std::cout << "got it\n";
                         // }
-                        if (t->type == CPP_CLOSE_BRACE && st.top().type == CPP_OPEN_BRACE) {
+                        if (t->type == CPP_CLOSE_BRACE && (st.top().type == CPP_OPEN_BRACE ||st.top().type == CPP_CLASS_BEGIN )) {
                             st.pop();
                             ++t;
                             continue;
@@ -1359,15 +1360,21 @@ CLASS_SCOPE:
                             ++t;
                         }
                     }
+
+                    assert((t-1)->type == CPP_CLOSE_BRACE);
+                    (t-1)->type = CPP_CLASS_END;
+
                     continue;
                 }
 
 
             } else if (t->val == "struct") {
                 auto t_n = t+1;
+                bool declaration = false;
                 while (true) {
                     if (t_n != ts.end() && t_n->type == CPP_NAME) {
                         t_n->type = CPP_STURCT;
+                        declaration = true;
                         _g_struct.insert({t_n->val, true, next_class_template, ""});
                         next_class_template = false;
                         break;
@@ -1376,7 +1383,32 @@ CLASS_SCOPE:
                         t_n = t+1;
                     }
                 }
-                ++t;
+                //找struct定义的开始和结束
+                if (declaration) {
+                    std::stack<Token> stt;
+                    while (t->type != CPP_OPEN_BRACE && t != ts.end()) {
+                        ++t;
+                    }
+                    if (t == ts.end()) {
+                        continue;
+                    }
+                    t->type = CPP_STRUCT_BEGIN;
+                    stt.push(*t);
+                    ++t;
+                    while(!stt.empty() && t != ts.end()) {
+                        if (t->type == CPP_CLOSE_BRACE && (stt.top().type == CPP_STRUCT_BEGIN || stt.top().type == CPP_OPEN_BRACE)) {
+                            stt.pop();
+                        } else if (t->type == CPP_OPEN_BRACE) {
+                            stt.push(*t);
+                        }
+                        ++t;
+                    }
+                    if (!stt.empty()) {
+                        std::cerr << "ERR to get struct declaration begin & end.\n";
+                    }
+                    assert((t-1)->type == CPP_CLOSE_BRACE);
+                    (t-1)->type = CPP_STRUCT_END;
+                }
             } else {
                 ++t;
             }
@@ -1423,6 +1455,16 @@ CLASS_SCOPE:
             }
         }
     }
+
+    //分析类成员变量
+    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+    //     Parser& parser = *it->second;
+    //     std::deque<Token>& ts = parser._ts;
+    //     for (auto t = ts.begin(); t != ts.end(); ) {
+
+
+    //     }
+    // }
 
     //分析typedef
     
