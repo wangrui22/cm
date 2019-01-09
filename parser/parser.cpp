@@ -1097,6 +1097,15 @@ void ParserGroup::extract_enum() {
             }
         }
     }
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ++t) {
+            if (_g_enum.find(t->val) != _g_enum.end()) {
+                t->type = CPP_TYPE;
+            }
+        }
+    }
 }
 
 void ParserGroup::extract_class() {
@@ -1541,6 +1550,27 @@ CLASS_SCOPE:
 
 }
 
+void ParserGroup::extract_stl_container() {
+    //TODO typedef已经连接了可能存在的container,需要重新分析
+
+    //分析的容器如下
+    //vector
+    //list
+    //deque
+    //queue
+    //stack
+    //map
+    //set
+    //pair
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+
+        }
+    }
+}
+
 void ParserGroup::extract_extern_type() {
     //抽取std boost类型
     //TODO 这里可以用配置文件来做, 不仅仅是std boost还可以是其他的三方模块
@@ -1809,78 +1839,3 @@ bool ParserGroup::is_in_class_struct(const std::string& name, bool& tm) {
 
     return false;
 }
-
-// void ParserGroup::extract_class_function() {
-//     _class_fn.clear();
-//     for (auto t = _ts.begin(); t != _ts.end(); ) {
-//         if (t->type == CPP_CLASS) {
-
-//             const std::string class_name = t->val;
-
-//             std::stack<Token> sb;
-//             std::deque<Token>::iterator fn_begin = t;
-//             std::deque<Token>::iterator fn_end = t;
-
-//             //find begin scope
-//             while(t->type != CPP_OPEN_BRACE) {
-//                 fn_begin = t+1;
-//                 ++t;
-//             }
-//             sb.push(*t);
-//             ++t;
-
-//             //find end scope
-//             while(!sb.empty()) {
-//                 if (t->type == CPP_OPEN_BRACE) {
-//                     sb.push(*t);
-//                     ++t;
-//                     continue;
-//                 }
-//                 if (t->type == CPP_CLOSE_BRACE && sb.top().type == CPP_OPEN_BRACE) {
-//                     sb.pop();
-//                     if (sb.empty()) {
-//                         fn_end = t;
-//                     }
-//                     ++t;
-//                     continue;
-//                 }
-                
-//                 ++t;
-//             }
-
-//             //extract class function
-//             //找括号组
-//             std::set<std::string> fns;
-//             std::stack<std::deque<Token>::iterator> sbi;
-//             auto tc = fn_begin;
-//             while(tc != fn_end) {
-//                 if (tc->val == "public") {
-//                     break;
-//                 } else {
-//                     ++tc;
-//                     continue;
-//                 }
-//             }
-
-//             for (; tc != fn_end; ) {
-//                 if (tc->type == CPP_OPEN_PAREN) {
-//                     sbi.push(tc);
-//                     ++tc;
-//                     continue;
-//                 }
-//                 if (tc->type == CPP_CLOSE_PAREN && sbi.top()->type == CPP_OPEN_PAREN) {
-//                     auto fend = sbi.top();
-//                     sbi.pop();
-//                     fns.insert((fend-1)->val);
-//                     ++tc;
-//                     continue;
-//                 }
-
-//                 ++tc;
-//             }
-//             _class_fn[class_name] = fns;
-//         }
-
-//         ++t;
-//     }
-// }

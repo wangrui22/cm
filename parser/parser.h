@@ -74,6 +74,7 @@ public:
     void extract_extern_type();
     //void extract_tempalte();
     void extract_class();
+    void extract_stl_container();
 
     void debug(const std::string& debug_out);
 
