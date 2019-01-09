@@ -1211,6 +1211,9 @@ CLASS_SCOPE:
                         //---------------------------------------------//
 
 
+                        // if (it->first =="mi_ray_caster.h" && t->val == "set_mask_label_level") {
+                        //     std::cout << "got it\n";
+                        // }
                         if (t->type == CPP_CLOSE_BRACE && st.top().type == CPP_OPEN_BRACE) {
                             st.pop();
                             ++t;
@@ -1249,7 +1252,7 @@ CLASS_SCOPE:
                                 //可能是构造函数
                                 if ((t-1)->val == "explicit") {
                                     //肯定是构造函数
-                                    t->type = CPP_CLASS;
+                                    t->type = CPP_FUNCTION;
                                     _g_class_fn.insert({access, cur_c_name, t->val});
 
                                     ++t;
@@ -1276,7 +1279,7 @@ CLASS_SCOPE:
                                     jump_brace();
                                     if (t->type == CPP_COLON) {
                                         //初始化列表 是构造函数 跳过直至第一个 {
-                                        t_may_c->type = CPP_CLASS;
+                                        t_may_c->type = CPP_FUNCTION;
                                         _g_class_fn.insert({access, cur_c_name, t_may_c->val});
                                         
                                         ++t;
@@ -1285,11 +1288,11 @@ CLASS_SCOPE:
                                         }
                                     } else if (t->type == CPP_OPEN_BRACE) {
                                         //构造函数体  是构造函数
-                                        t_may_c->type = CPP_CLASS;
+                                        t_may_c->type = CPP_FUNCTION;
                                         _g_class_fn.insert({access, cur_c_name, t_may_c->val});
                                     } else if (t->type == CPP_SEMICOLON) {
                                         //构造函数定义  是构造函数
-                                        t_may_c->type = CPP_CLASS;
+                                        t_may_c->type = CPP_FUNCTION;
                                         _g_class_fn.insert({access, cur_c_name, t_may_c->val});
                                     } else {
                                         //不是构造函数
@@ -1301,8 +1304,8 @@ CLASS_SCOPE:
                                 auto t_may_c = t;
                                 ++t;
                                 jump_brace();
-                                if (t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON) {
-                                    t_may_c->type = CPP_CLASS;
+                                if (t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
+                                    t_may_c->type = CPP_FUNCTION;
                                     _g_class_fn.insert({access, cur_c_name, t_may_c->val});
                                 } else {
                                     //不是成员函数

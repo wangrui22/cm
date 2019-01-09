@@ -464,6 +464,9 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
         case CPP_CONNECTOR: 
             out << "\\";
             break;
+        case CPP_FUNCTION:
+            out << "function";
+            break;
         default:
             out << "INVALID";
             break;    
