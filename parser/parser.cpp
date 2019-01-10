@@ -1031,7 +1031,6 @@ void ParserGroup::extract_class() {
                     continue;
                 }
 
-
                 std::string cur_c_name;
                 const bool is_struct = t->val == "class" ? false : true;
                 const TokenType cur_type = t->val == "class" ? CPP_CLASS : CPP_STURCT;
@@ -1286,21 +1285,27 @@ CLASS_SCOPE:
                     continue;
                 } else {
                     //合并模板类型的类或者结构体
-                    Token& c_t = *t;
+                    if (t->val == "ScanLineAnalysis") {
+                        std::cout << "got it";
+                    }
+                    Token* c_t = &(*t);
                     if ((t+1) != ts.end() && (t+1)->type == CPP_LESS) {
                         std::stack<Token> st; 
                         st.push(*(t+1));  
-                        c_t.ts.push_back(*(t+1));
-                        t = ts.erase(t+1);
+                        c_t->ts.push_back(*(t+1));
+                        t = ts.erase(t+1);//<
+                        c_t = &(*(t-1));
                         while(!st.empty() && t != ts.end()) {
                             if (t->type == CPP_LESS) {
                                 st.push(*t);
                             }
-                            else if (t->type == CPP_GREATER && st.top().type == CPP_LESS) {
+                            else if (t->type == CPP_GREATER) {
+                                assert(st.top().type == CPP_LESS);
                                 st.pop();
                             }
-                            c_t.ts.push_back(*t);
+                            c_t->ts.push_back(*t);
                             t = ts.erase(t);
+                            c_t = &(*(t-1));
                         }
                     } else {
                         t->type = CPP_TYPE;
@@ -1424,110 +1429,126 @@ CLASS_SCOPE:
 
 }
 
-// void ParserGroup::extract_stl_container() {
-//     //TODO typedef已经连接了可能存在的container,需要重新分析
+void ParserGroup::extract_stl_container() {
+    //TODO typedef已经连接了可能存在的container,需要重新分析
 
-//     //分析的容器如下
-//     //vector
-//     //deque
-//     //queue
-//     //stack
-//     //list
-//     //set
-//     //map
-//     //pair
-//     //auto_ptr
-//     //shared_ptr
-//     //weak_ptr
-//     //unique_ptr
-//     std::set<std::string> std_container;
-//     std_container.insert("vector");
-//     std_container.insert("deque");
-//     std_container.insert("queue");
-//     std_container.insert("stack");
-//     std_container.insert("list");
-//     std_container.insert("set");
-//     std_container.insert("map");
-//     std_container.insert("pair");
-//     std_container.insert("auto_ptr");
-//     std_container.insert("shared_ptr");
-//     std_container.insert("weak_ptr");
-//     std_container.insert("unique_ptr");
+    //分析的容器如下
+    //vector
+    //deque
+    //queue
+    //stack
+    //list
+    //set
+    //map
+    //pair
+    //auto_ptr
+    //shared_ptr
+    //weak_ptr
+    //unique_ptr
+    std::set<std::string> std_container;
+    std_container.insert("vector");
+    std_container.insert("deque");
+    std_container.insert("queue");
+    std_container.insert("stack");
+    std_container.insert("list");
+    std_container.insert("set");
+    std_container.insert("map");
+    std_container.insert("pair");
+    std_container.insert("auto_ptr");
+    std_container.insert("shared_ptr");
+    std_container.insert("weak_ptr");
+    std_container.insert("unique_ptr");
 
 
-//     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-//         Parser& parser = *it->second;
-//         std::deque<Token>& ts = parser._ts;
-//         for (auto t = ts.begin(); t != ts.end(); ) {
-//             auto t_n = t+1;//::
-//             auto t_nn = t+2;//container
-//             auto t_nnn = t+3;//<
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            auto t_n = t+1;//::
+            auto t_nn = t+2;//container
+            auto t_nnn = t+3;//<
 
-//             if (t->val == "std" && t_n != ts.end() && t_nn != ts.end() && t_nnn != ts.end() &&
-//                 t_n->type == CPP_SCOPE && std_container.find(t_nn->val) != std_container.end() && t_nnn->type == CPP_LESS) {
-//                 //找到std的源头, 第一个容器
-//                 std::stack<Token*> stt;//stack token type
-//                 std::stack<Token> st_scope; //<>
-//                 Token* root_scope = (*t);
-//                 Token* cur_scope = &stt.top();
-
-//                 root_scope->val = t_nn->val;
-//                 stt.push(root_scope);
+            if (t->val == "std" && t_n != ts.end() && t_nn != ts.end() && t_nnn != ts.end() &&
+                t_n->type == CPP_SCOPE && std_container.find(t_nn->val) != std_container.end() && t_nnn->type == CPP_LESS) {
+                //找到std的源头, 第一个容器
+                std::stack<Token*> stt;//stack token type
+                std::stack<Token> st_scope; //<>
                 
-//                 st_scope.push(*t_nnn); //<
-//                 t++;
-//                 t = ts.erase(t);//::
-//                 t = ts.erase(t);//container
-//                 t = ts.erase(t);//<
+                Token* root_scope = &(*t);
+                root_scope->val = t_nn->val;
+                root_scope->subject = "std";
+                stt.push(root_scope);
+                Token* cur_scope = stt.top();
+                st_scope.push(*t_nnn); //<
 
-//                 while(!stt.empty() && t != ts.end()) {
-//                     auto t_n = t+1;//::
-//                     auto t_nn = t+2;//container
-//                     auto t_nnn = t+3;//<
-//                     if (t->val == "std" && t_n != ts.end() && t_nn != ts.end() && t_nnn != ts.end() && 
-//                         t_n->type == CPP_SCOPE && t_nnn->type == CPP_LESS) {
-//                         //容器的嵌套
-//                         const std::string cur_name = t_nn->val;
-//                         if (std_container.find(cur_name) != std_container.end()) {
-//                             Token sub;
-//                             sub.val = cur_name;
-//                             sub.type = CPP_TYPE;
-//                             cur_scope->st.push_back(sub);
-//                             cur_scope = &cur_scope.st.back();
-//                             st_scope.push(*t_nnn);
-//                         } else {
-//                             std::cout << "unsupported std container: " << cur_name << "\n";
-//                             ++t;
-//                             continue;
-//                         }
-                        
-                        
-//                     } else if (t->type == CPP_GREATER) {
-//                         //>
-//                         //jump out scope
+                t++;
+                t = ts.erase(t);//::
+                t = ts.erase(t);//container
+                t = ts.erase(t);//<
 
-//                     } else if (t->type == CPP_TYPE) {
-//                         //
-//                     } else if (t->type == NAME && t_n->type == CPP_LESS) {
-//                         //应该也是其他模块的模板, 而且是没有被解析的
+                while(!stt.empty() && t != ts.end()) {
+                    auto t_n = t+1;//::
+                    auto t_nn = t+2;//container
+                    auto t_nnn = t+3;//<
+                    if (t->val == "std" && t_n != ts.end() && t_nn != ts.end() && t_nnn != ts.end() && 
+                        t_n->type == CPP_SCOPE && t_nnn->type == CPP_LESS) {
+                        //容器的嵌套
+                        const std::string cur_name = t_nn->val;
+                        if (std_container.find(cur_name) != std_container.end()) {
+                            Token sub;
+                            sub.val = cur_name;
+                            sub.type = CPP_TYPE;
+                            sub.subject = "std";
+                            cur_scope->ts.push_back(sub);
+                            cur_scope = &(cur_scope->ts.back());//进入到下一个容器中
+                            st_scope.push(*t_nnn);
+                            stt.push(cur_scope);
 
-//                     } else if (t->type == CPP_TYPE && t_n->type == CPP_LESS) {
-//                         //模板
-                        
+                            t = ts.erase(t);//std
+                            t = ts.erase(t);//::
+                            t = ts.erase(t);//container
+                            t = ts.erase(t);//<
 
-//                     } else if (t->type) {
-//                         ++t;
-//                     }
-//                 }
+                        } else {
+                            //TODO 如何处理 ?
+                            std::cout << "unsupported std container: " << cur_name << "\n";
+                            ++t;
+                            continue;
+                        }                        
+                    } else if (t->type == CPP_GREATER) {
+                        //>
+                        //jump out scope
+                        assert(st_scope.top().type == CPP_LESS); 
+                        st_scope.pop();
+                        stt.pop();
+                        cur_scope = stt.top();
+                        t = ts.erase(t);
+                        continue;
+                    } else if (t->type == CPP_TYPE) {
+                        //已知类型
+                        cur_scope->ts.push_back(*t);
+                        t = ts.erase(t);
+                        continue;
+                    } else if (t->type == CPP_TYPE && t_n->type == CPP_LESS) {
+                        //TODO 应该也是其他模块的模板, 而且是没有被解析的
+                        std::cout << "invalid template name: " << t->val << std::endl; 
+                    } else if (t->type == CPP_NAME && t_n->type == CPP_LESS) {
+                        //TODO 应该也是其他模块的模板, 而且是没有被解析的
+                        std::cout << "invalid template name: " << t->val << std::endl; 
+                    } else if (t->type == CPP_NAME) {
+                        //TODO 应该也是其他模块的模板, 而且是没有被解析的
+                        std::cout << "invalid name: " << t->val << std::endl; 
+                    } else {
+                        ++t;
+                    }
+                }   
 
-                
-
-//             } else if (!stt.empty() &&t->type == CPP_TYPE) {
-
-//             }
-//         }
-//     }
-// }
+            } else {
+                ++t;
+            }
+        }
+    }
+}
 
 void ParserGroup::extract_extern_type() {
     //抽取std boost类型
