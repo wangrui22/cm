@@ -36,7 +36,7 @@ class Parser {
 public: 
     friend class ParserGroup;
 
-    Parser();
+    Parser(bool to_be_confuse=false);
     ~Parser();
 
     Token lex(Reader* cpp_reader);
@@ -47,18 +47,9 @@ public:
     void f1();
     void f2();
 
-    //接口混淆
-    // void extract_class();
-    // void extract_class_fn();
-
-    // const std::set<std::string>& get_classes() const;
-    // const std::map<std::string, std::set<std::string>>& get_class_fns() const;
-
 private:
     std::deque<Token> _ts;
-
-    // std::set<std::string> _class;
-    // std::map<std::string, std::set<std::string>> _class_fn;
+    bool _to_be_confuse;
 };
 
 
@@ -67,7 +58,7 @@ public:
     ParserGroup();
     ~ParserGroup();
 
-    void add_parser(const std::string& file_name, Parser* parser);
+    void add_parser(const std::string& file_name, Parser* parser, Reader* reader);
     Parser* get_parser(const std::string& file_name);
 
     //按顺序调用
@@ -87,14 +78,16 @@ private:
     bool is_in_class_struct(const std::string& name, bool& tm);
     bool is_in_typedef(const std::string& name);
 private:
+    std::map<std::string, Parser*> _parsers;
+    std::map<std::string, Reader*> _readers;
+
     std::vector<Token> _g_marco;//全局宏定义
     std::set<ClassType> _g_class;//全局class struct
     std::map<ClassType, std::vector<ClassFunction>> _g_class_fn;//全局的class的成员函数
     std::map<ClassType, std::vector<ClassVariable>> _g_class_variable;//全局的class的成员变量
     std::set<std::string> _g_enum;//全局的枚举
-    std::map<std::string, Parser*> _parsers;
 
-    std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来    
+    std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来  
 };
 
 #endif

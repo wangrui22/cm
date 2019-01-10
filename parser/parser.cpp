@@ -307,7 +307,7 @@ static inline Token lex_string(char c , Reader* cpp_reader, Token& token, int pe
     }
 }
 
-Parser::Parser() {
+Parser::Parser(bool to_be_confuse):_to_be_confuse(to_be_confuse) {
 
 }
 
@@ -821,8 +821,9 @@ ParserGroup::~ParserGroup() {
 
 }
 
-void ParserGroup::add_parser(const std::string& file_name, Parser* parser) {
+void ParserGroup::add_parser(const std::string& file_name, Parser* parser, Reader* reader) {
     _parsers[file_name] = parser;
+    _readers[file_name] = reader;
 }
 
 Parser* ParserGroup::get_parser(const std::string& file_name) {

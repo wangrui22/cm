@@ -28,6 +28,8 @@ int main(int argc, char* argv[]) {
 
         std::cout << "parse module: " << src << "\n";
 
+        const bool to_be_confuse = src_dir[j] == "renderalgo";
+
         std::set<std::string> post;
         post.insert(".h");
         post.insert(".hpp");
@@ -44,12 +46,12 @@ int main(int argc, char* argv[]) {
         for (size_t i=0; i<h_file.size(); ++i) {
             std::cout << "parse file: " << h_file[i] << "\n";
 
-            Reader reader;
-            reader.read(h_file[i]);
-            Parser* parser = new Parser();
+            Reader* reader = new Reader();
+            reader->read(h_file[i]);
+            Parser* parser = new Parser(to_be_confuse);
             while(true) {
-                parser->push_token(parser->lex(&reader));
-                if (reader.eof()) {
+                parser->push_token(parser->lex(reader));
+                if (reader->eof()) {
                     break;
                 }
             }
@@ -59,19 +61,19 @@ int main(int argc, char* argv[]) {
 
             std::string file_name = Util::get_file_name(h_file[i]);
 
-            parser_group.add_parser(file_name, parser);
+            parser_group.add_parser(file_name, parser, reader);
         }
 
         for (size_t i=0; i<c_file.size(); ++i) {
             std::cout << "parse file: " << c_file[i] << "\n";
 
-            Reader reader;
-            reader.read(c_file[i]);
-            Parser* parser = new Parser();
+            Reader* reader = new Reader();
+            reader->read(c_file[i]);
+            Parser* parser = new Parser(to_be_confuse);
 
             while(true) {
-                parser->push_token(parser->lex(&reader));
-                if (reader.eof()) {
+                parser->push_token(parser->lex(reader));
+                if (reader->eof()) {
                     break;
                 }
             }
@@ -81,7 +83,7 @@ int main(int argc, char* argv[]) {
 
             std::string file_name = Util::get_file_name(c_file[i]);
 
-            parser_group.add_parser(file_name, parser);
+            parser_group.add_parser(file_name, parser, reader);
         }
     }
 
