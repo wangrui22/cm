@@ -284,7 +284,15 @@ static inline Token lex_string(char c , Reader* cpp_reader, Token& token, int pe
 
     int input = -1;
     if (c == '\"') {
-        input = 0;
+        if (token.val[token.val.length()-1] == '\\') {
+            if (token.val.length() > 2 && token.val[token.val.length()-2] == '\\') {
+                input = 0;//出现了 \\"
+            } else {
+                input = 1; //出现了 \"
+            }
+        } else {
+            input = 0;
+        }
     } else {
         input = 1;
     }
@@ -420,10 +428,15 @@ Token Parser::lex(Reader* cpp_reader) {
         {
             char nc = cpp_reader->next_char();
             char nnc = cpp_reader->next_char();
+            char nnnc = cpp_reader->next_char();
             if (nnc == '\'' && nc != '\'') {
+                cpp_reader->pre_char();
                 return {CPP_CHAR, "\'" + std::string(1,nc) + "\'", cpp_reader->get_cur_loc()-2};
+            } else if (nc == '\\' && nnnc == '\'' && nnc != '\'') {
+                return {CPP_CHAR, "\'\\" + std::string(1,nnc) + "\'", cpp_reader->get_cur_loc()-3};
             }
 
+            cpp_reader->pre_char();
             cpp_reader->pre_char();
             cpp_reader->pre_char();
             return {CPP_OTHER, "", 0};
@@ -431,29 +444,13 @@ Token Parser::lex(Reader* cpp_reader) {
 
         //string
         case '\"': 
-        {
+        { 
             Token t = {CPP_STRING, "\"", cpp_reader->get_cur_loc()};
             return lex_string(cpp_reader->next_char(), cpp_reader, t, 1);
         }
 
         case '-':
         {
-            // Token t = cpp_reader->get_last_token();
-            // //TODO 带符号数字的解析这样可以吗, 还是需要二次合并
-            // if (t.type == CPP_OPEN_PAREN ||
-            //     t.type == CPP_EQ ||
-            //     t.type == CPP_EQ_EQ ||
-            //     t.type == CPP_NOT_EQ ||
-            //     t.type == CPP_GREATER ||
-            //     t.type == CPP_LESS ||
-            //     t.type == CPP_EQ_EQ ||
-            //     t.type == CPP_NOT_EQ ||
-            //     t.type == CPP_GREATER_EQ || 
-            //     t.type == CPP_LESS_EQ) {
-            //     Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
-            //     return lex_number(c, cpp_reader, t, 0);
-            // }
-
             char nc = cpp_reader->next_char();
             if (nc == '=') {
                 return {CPP_MINUS_EQ, "-=", cpp_reader->get_cur_loc()-1};
@@ -471,21 +468,6 @@ Token Parser::lex(Reader* cpp_reader) {
         }
         case '+':
         {
-            // Token t = cpp_reader->get_last_token();
-            // if (t.type == CPP_OPEN_PAREN ||
-            //     t.type == CPP_EQ ||
-            //     t.type == CPP_EQ_EQ ||
-            //     t.type == CPP_NOT_EQ ||
-            //     t.type == CPP_GREATER ||
-            //     t.type == CPP_LESS ||
-            //     t.type == CPP_EQ_EQ ||
-            //     t.type == CPP_NOT_EQ ||
-            //     t.type == CPP_GREATER_EQ || 
-            //     t.type == CPP_LESS_EQ) {
-            //     Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
-            //     return lex_number(c, cpp_reader, t, 0);
-            // }
-
             char nc = cpp_reader->next_char();
             if (nc == '=') {
                 return {CPP_PLUS_EQ, "+=", cpp_reader->get_cur_loc()-1};
@@ -829,113 +811,6 @@ void Parser::f2() {
     }
 }
 
-
-// void Parser::extract_class() {
-//     _class.clear();
-//     for (auto t = _ts.begin(); t != _ts.end(); ++t) {
-//         if (t->val == "class") {
-//             //TODO 需要排除类前面跟着的修饰符
-//             auto t_n = t+1;
-//             if (t_n != _ts.end() && t_n->type == CPP_NAME) {
-//                 t_n->type = CPP_CLASS;
-//                 _class.insert(t_n->val);
-//             }
-//             ++t;
-//         } else if (t->val == "struct") {
-//             auto t_n = t+1;
-//             if (t_n != _ts.end() && t_n->type == CPP_NAME) {
-//                 t_n->type = CPP_STURCT;
-//                 _class.insert(t_n->val);
-//             }
-//             ++t;
-//         }
-//     }
-// }
-
-// void Parser::extract_class_fn() {
-//     _class_fn.clear();
-//     for (auto t = _ts.begin(); t != _ts.end(); ) {
-//         if (t->type == CPP_CLASS) {
-
-//             const std::string class_name = t->val;
-
-//             std::stack<Token> sb;
-//             std::deque<Token>::iterator fn_begin = t;
-//             std::deque<Token>::iterator fn_end = t;
-
-//             //find begin scope
-//             while(t->type != CPP_OPEN_BRACE) {
-//                 fn_begin = t+1;
-//                 ++t;
-//             }
-//             sb.push(*t);
-//             ++t;
-
-//             //find end scope
-//             while(!sb.empty()) {
-//                 if (t->type == CPP_OPEN_BRACE) {
-//                     sb.push(*t);
-//                     ++t;
-//                     continue;
-//                 }
-//                 if (t->type == CPP_CLOSE_BRACE && sb.top().type == CPP_OPEN_BRACE) {
-//                     sb.pop();
-//                     if (sb.empty()) {
-//                         fn_end = t;
-//                     }
-//                     ++t;
-//                     continue;
-//                 }
-                
-//                 ++t;
-//             }
-
-//             //extract class function
-//             //找括号组
-//             std::set<std::string> fns;
-//             std::stack<std::deque<Token>::iterator> sbi;
-//             auto tc = fn_begin;
-//             while(tc != fn_end) {
-//                 if (tc->val == "public") {
-//                     break;
-//                 } else {
-//                     ++tc;
-//                     continue;
-//                 }
-//             }
-
-//             for (; tc != fn_end; ) {
-//                 if (tc->type == CPP_OPEN_PAREN) {
-//                     sbi.push(tc);
-//                     ++tc;
-//                     continue;
-//                 }
-//                 if (tc->type == CPP_CLOSE_PAREN && sbi.top()->type == CPP_OPEN_PAREN) {
-//                     auto fend = sbi.top();
-//                     sbi.pop();
-//                     fns.insert((fend-1)->val);
-//                     ++tc;
-//                     continue;
-//                 }
-
-//                 ++tc;
-//             }
-//             _class_fn[class_name] = fns;
-//         }
-
-//         ++t;
-//     }
-// }
-
-// const std::map<std::string, std::set<std::string>>& Parser::get_class_fns() const {
-//     return _class_fn;
-// }
-
-// const std::set<std::string>& Parser::get_classes() const {
-//     return _class;
-// }
-
-
 ParserGroup::ParserGroup() {
 
 }
@@ -1012,7 +887,6 @@ void ParserGroup::extract_marco() {
                                 continue;
                             } else if (is_r.empty() && t->val == "endif") {
                                 //找到终结的endif
-                                ++t;
                                 continue;
                             } else if (!is_r.empty() && (t->val == "ifdef" || t->val== "ifndef")) {
                                 //还没有遇到结束else分支, 就又遇到了嵌套的条件语句(不走的)
@@ -1550,26 +1424,110 @@ CLASS_SCOPE:
 
 }
 
-void ParserGroup::extract_stl_container() {
-    //TODO typedef已经连接了可能存在的container,需要重新分析
+// void ParserGroup::extract_stl_container() {
+//     //TODO typedef已经连接了可能存在的container,需要重新分析
 
-    //分析的容器如下
-    //vector
-    //list
-    //deque
-    //queue
-    //stack
-    //map
-    //set
-    //pair
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *it->second;
-        std::deque<Token>& ts = parser._ts;
-        for (auto t = ts.begin(); t != ts.end(); ) {
+//     //分析的容器如下
+//     //vector
+//     //deque
+//     //queue
+//     //stack
+//     //list
+//     //set
+//     //map
+//     //pair
+//     //auto_ptr
+//     //shared_ptr
+//     //weak_ptr
+//     //unique_ptr
+//     std::set<std::string> std_container;
+//     std_container.insert("vector");
+//     std_container.insert("deque");
+//     std_container.insert("queue");
+//     std_container.insert("stack");
+//     std_container.insert("list");
+//     std_container.insert("set");
+//     std_container.insert("map");
+//     std_container.insert("pair");
+//     std_container.insert("auto_ptr");
+//     std_container.insert("shared_ptr");
+//     std_container.insert("weak_ptr");
+//     std_container.insert("unique_ptr");
 
-        }
-    }
-}
+
+//     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+//         Parser& parser = *it->second;
+//         std::deque<Token>& ts = parser._ts;
+//         for (auto t = ts.begin(); t != ts.end(); ) {
+//             auto t_n = t+1;//::
+//             auto t_nn = t+2;//container
+//             auto t_nnn = t+3;//<
+
+//             if (t->val == "std" && t_n != ts.end() && t_nn != ts.end() && t_nnn != ts.end() &&
+//                 t_n->type == CPP_SCOPE && std_container.find(t_nn->val) != std_container.end() && t_nnn->type == CPP_LESS) {
+//                 //找到std的源头, 第一个容器
+//                 std::stack<Token*> stt;//stack token type
+//                 std::stack<Token> st_scope; //<>
+//                 Token* root_scope = (*t);
+//                 Token* cur_scope = &stt.top();
+
+//                 root_scope->val = t_nn->val;
+//                 stt.push(root_scope);
+                
+//                 st_scope.push(*t_nnn); //<
+//                 t++;
+//                 t = ts.erase(t);//::
+//                 t = ts.erase(t);//container
+//                 t = ts.erase(t);//<
+
+//                 while(!stt.empty() && t != ts.end()) {
+//                     auto t_n = t+1;//::
+//                     auto t_nn = t+2;//container
+//                     auto t_nnn = t+3;//<
+//                     if (t->val == "std" && t_n != ts.end() && t_nn != ts.end() && t_nnn != ts.end() && 
+//                         t_n->type == CPP_SCOPE && t_nnn->type == CPP_LESS) {
+//                         //容器的嵌套
+//                         const std::string cur_name = t_nn->val;
+//                         if (std_container.find(cur_name) != std_container.end()) {
+//                             Token sub;
+//                             sub.val = cur_name;
+//                             sub.type = CPP_TYPE;
+//                             cur_scope->st.push_back(sub);
+//                             cur_scope = &cur_scope.st.back();
+//                             st_scope.push(*t_nnn);
+//                         } else {
+//                             std::cout << "unsupported std container: " << cur_name << "\n";
+//                             ++t;
+//                             continue;
+//                         }
+                        
+                        
+//                     } else if (t->type == CPP_GREATER) {
+//                         //>
+//                         //jump out scope
+
+//                     } else if (t->type == CPP_TYPE) {
+//                         //
+//                     } else if (t->type == NAME && t_n->type == CPP_LESS) {
+//                         //应该也是其他模块的模板, 而且是没有被解析的
+
+//                     } else if (t->type == CPP_TYPE && t_n->type == CPP_LESS) {
+//                         //模板
+                        
+
+//                     } else if (t->type) {
+//                         ++t;
+//                     }
+//                 }
+
+                
+
+//             } else if (!stt.empty() &&t->type == CPP_TYPE) {
+
+//             }
+//         }
+//     }
+// }
 
 void ParserGroup::extract_extern_type() {
     //抽取std boost类型
