@@ -89,7 +89,8 @@ int main(int argc, char* argv[]) {
     parser_group.extract_marco();
     parser_group.extract_extern_type();
     parser_group.extract_class();
-    //parser_group.extract_stl_container();
+    parser_group.extract_typedef();
+    parser_group.extract_stl_container();
     
     parser_group.debug("./result");
 

@@ -220,7 +220,7 @@ static inline Token lex_identifier(char c, Reader* cpp_reader, Token& token,  in
             cpp_reader->pre_char();
         }
         if (per_status == 2) {
-            for (int i=0; i<NUM_KEYWORDS; ++i) {
+            for (int i=0; i<sizeof(keywords)/sizeof(char*); ++i) {
                 if (token.val == keywords[i]) {
                     token.type = CPP_KEYWORD;
                     break;
@@ -649,11 +649,13 @@ const std::deque<Token>& Parser::get_tokens() const {
 }
 
 static inline bool is_type(const std::string& str) {
-    for (int i=0; i<NUM_TYPE; ++i) {
+    for (int i=0; i<sizeof(types)/sizeof(char*); ++i) {
         if (str == types[i]) {
             return true;
         }
     }
+
+    return false;
 } 
 
 void Parser::f1() {
@@ -1285,9 +1287,6 @@ CLASS_SCOPE:
                     continue;
                 } else {
                     //合并模板类型的类或者结构体
-                    if (t->val == "ScanLineAnalysis") {
-                        std::cout << "got it";
-                    }
                     Token* c_t = &(*t);
                     if ((t+1) != ts.end() && (t+1)->type == CPP_LESS) {
                         std::stack<Token> st; 
@@ -1319,6 +1318,56 @@ CLASS_SCOPE:
         }
     }
 
+
+    //抽取stl的类型
+
+    //抽取类成员函数的ret
+
+    //分析类的成员变量
+    
+
+
+    //分析类成员变量
+    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+    //     Parser& parser = *it->second;
+    //     std::deque<Token>& ts = parser._ts;
+    //     std::string cur_c_name;
+    //     std::string cur_s_name;
+    //     for (auto t = ts.begin(); t != ts.end(); ) {
+    //         if (t->type == CPP_CLASS) {
+    //             cur_c_name = t->val;
+    //             cur_s_name = "";
+    //         } else if (t->type == CPP_STURCT) {
+    //             cur_s_name = t->val;
+    //             cur_c_name = "";
+    //         } else if (t->type == CPP_CLASS_BEGIN) {
+    //             //分析class
+                
+                
+
+                
+    //         } else if (t->type == CPP_STRUCT_BEGIN) {
+    //             //分析struct
+
+
+    //         } else {
+    //             ++t;
+    //         }
+    //     }
+    // }
+
+    //分析typedef
+    
+
+    //分析template的类型
+
+    //引入stl 类型?
+
+    //引入容器
+
+}
+
+void ParserGroup::extract_typedef() {
     //抽取typedef的类型(注意作用域)
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
@@ -1381,52 +1430,17 @@ CLASS_SCOPE:
         }
     }
 
-    //抽取stl的类型
+    //把所有typedef 都设置成type
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
 
-    //抽取类成员函数的ret
-
-    //分析类的成员变量
-    
-
-
-    //分析类成员变量
-    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-    //     Parser& parser = *it->second;
-    //     std::deque<Token>& ts = parser._ts;
-    //     std::string cur_c_name;
-    //     std::string cur_s_name;
-    //     for (auto t = ts.begin(); t != ts.end(); ) {
-    //         if (t->type == CPP_CLASS) {
-    //             cur_c_name = t->val;
-    //             cur_s_name = "";
-    //         } else if (t->type == CPP_STURCT) {
-    //             cur_s_name = t->val;
-    //             cur_c_name = "";
-    //         } else if (t->type == CPP_CLASS_BEGIN) {
-    //             //分析class
-                
-                
-
-                
-    //         } else if (t->type == CPP_STRUCT_BEGIN) {
-    //             //分析struct
-
-
-    //         } else {
-    //             ++t;
-    //         }
-    //     }
-    // }
-
-    //分析typedef
-    
-
-    //分析template的类型
-
-    //引入stl 类型?
-
-    //引入容器
-
+        for (auto t = ts.begin(); t != ts.end(); ++t) {
+            if (t->type == CPP_NAME && is_in_typedef(t->val)) {
+                t->type = CPP_TYPE;
+            }
+        }
+    }
 }
 
 void ParserGroup::extract_stl_container() {
@@ -1458,6 +1472,7 @@ void ParserGroup::extract_stl_container() {
     std_container.insert("shared_ptr");
     std_container.insert("weak_ptr");
     std_container.insert("unique_ptr");
+    std_container.insert("function");
 
 
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
@@ -1477,14 +1492,15 @@ void ParserGroup::extract_stl_container() {
                 Token* root_scope = &(*t);
                 root_scope->val = t_nn->val;
                 root_scope->subject = "std";
+                root_scope->type = CPP_TYPE;
                 stt.push(root_scope);
                 Token* cur_scope = stt.top();
                 st_scope.push(*t_nnn); //<
 
-                t++;
-                t = ts.erase(t);//::
-                t = ts.erase(t);//container
-                t = ts.erase(t);//<
+                int step = 0;
+
+                t+=4;
+                step +=3;//:: container <
 
                 while(!stt.empty() && t != ts.end()) {
                     auto t_n = t+1;//::
@@ -1504,11 +1520,8 @@ void ParserGroup::extract_stl_container() {
                             st_scope.push(*t_nnn);
                             stt.push(cur_scope);
 
-                            t = ts.erase(t);//std
-                            t = ts.erase(t);//::
-                            t = ts.erase(t);//container
-                            t = ts.erase(t);//<
-
+                            step += 4; // std :: container <
+                            t+=4;
                         } else {
                             //TODO 如何处理 ?
                             std::cout << "unsupported std container: " << cur_name << "\n";
@@ -1521,27 +1534,74 @@ void ParserGroup::extract_stl_container() {
                         assert(st_scope.top().type == CPP_LESS); 
                         st_scope.pop();
                         stt.pop();
-                        cur_scope = stt.top();
-                        t = ts.erase(t);
+                        cur_scope = stt.empty() ? nullptr : stt.top();
+                        ++t;
+                        ++step;
                         continue;
                     } else if (t->type == CPP_TYPE) {
                         //已知类型
                         cur_scope->ts.push_back(*t);
-                        t = ts.erase(t);
+                        ++t;
+                        ++step;
                         continue;
                     } else if (t->type == CPP_TYPE && t_n->type == CPP_LESS) {
                         //TODO 应该也是其他模块的模板, 而且是没有被解析的
                         std::cout << "invalid template name: " << t->val << std::endl; 
+                        assert(false);
                     } else if (t->type == CPP_NAME && t_n->type == CPP_LESS) {
                         //TODO 应该也是其他模块的模板, 而且是没有被解析的
-                        std::cout << "invalid template name: " << t->val << std::endl; 
+                        std::cout << "invalid template name 2: " << t->val << std::endl; 
+                        assert(false);
                     } else if (t->type == CPP_NAME) {
                         //TODO 应该也是其他模块的模板, 而且是没有被解析的
+                        cur_scope->ts.push_back(*t);
+                        ++t;
+                        ++step;
+                        continue;
                         std::cout << "invalid name: " << t->val << std::endl; 
+                    } else if(t->type == CPP_OPEN_SQUARE || t->type == CPP_CLOSE_SQUARE ) {
+                        //unique_ptr
+                        cur_scope->ts.push_back(*t);
+                        ++t;
+                        ++step;
+                        continue;
+                    } else if (t->type == CPP_COMMA) {
+                        ++t;
+                        ++step;
+                        continue;
+                    } else if (t->type == CPP_MULT) {
+                        //指针
+                        cur_scope->ts.push_back(*t);
+                        ++t;
+                        ++step;
+                        continue;
+                    } else if (t->type == CPP_SCOPE) {
+                        //指针
+                        cur_scope->ts.push_back(*t);
+                        ++t;
+                        ++step;
+                        continue;
+                    } else if (t->type == CPP_OPEN_PAREN || t->type == CPP_CLOSE_PAREN) {
+                        //function 会带()
+                        cur_scope->ts.push_back(*t);
+                        ++t;
+                        ++step;
+                        continue;
                     } else {
+                        std::cout << "invalid name 2: " << t->val << std::endl; 
+                        assert(false);
                         ++t;
                     }
                 }   
+
+                //erase 
+                t-=step;
+                while (step>0) {
+                    t = ts.erase(t);
+                    --step;
+                }
+
+                //std::cout << "t-1: " << (t-1)->val << std::endl;
 
             } else {
                 ++t;
@@ -1655,6 +1715,18 @@ void ParserGroup::extract_extern_type() {
     }
 }
 
+static inline void print_token(const Token& t, std::ofstream& out) {
+    if (t.ts.empty()) {
+        out << t.val << " ";
+        return;
+    } else {
+        for (auto it2 = t.ts.begin(); it2 != t.ts.end(); ++it2) {
+            out << t.val << " ";
+            print_token(*it2, out);
+        }
+    }
+}
+
 void ParserGroup::debug(const std::string& debug_out) {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
@@ -1666,17 +1738,12 @@ void ParserGroup::debug(const std::string& debug_out) {
         }
 
         const std::deque<Token>& ts = parser.get_tokens();
-        for (auto it=ts.begin(); it!=ts.end(); ++it) {
-            const Token& t = *it;
-            if (!t.ts.empty()) {
-                out << t.type << ": " << t.val << " ";
-                for (auto it2 = t.ts.begin(); it2 != t.ts.end(); ++it2) {
-                    out << it2->val << " ";
-                }
-                out << "\n";
-            } else {
-                out << t.type << ": " << t.val << std::endl;
-            }
+        for (auto it2=ts.begin(); it2!=ts.end(); ++it2) {
+            const Token& t = *it2;
+            out << t.type << ": ";
+
+            print_token(t, out);
+            out << std::endl;
         }
 
         out.close();
@@ -1800,9 +1867,6 @@ bool ParserGroup::is_in_marco(const std::string& m) {
                 return true;
             }
         }
-        // if ((*it).ts == m) {
-        //     return true;
-        // }
     }
 
     return false;
@@ -1812,6 +1876,16 @@ bool ParserGroup::is_in_class_struct(const std::string& name, bool& tm) {
     for (auto it=_g_class.begin(); it != _g_class.end(); ++it) {
         if (it->name == name) {
             tm = it->is_template;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ParserGroup::is_in_typedef(const std::string& name) {
+    for (auto it=_g_typedefs.begin(); it != _g_typedefs.end(); ++it) {
+        if (it->val == name) {
             return true;
         }
     }

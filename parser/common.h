@@ -160,8 +160,7 @@ inline bool operator < (const ClassFunction& l,  const ClassFunction& r) {
     l.c_name+"::"+l.fn_name < r.c_name+"::"+r.fn_name;
 }
 
-const int NUM_KEYWORDS = 86;
-static const char* keywords[NUM_KEYWORDS] = {
+static const char* keywords[] = {
 "alignas",
 "alignof",
 "and",
@@ -250,8 +249,7 @@ static const char* keywords[NUM_KEYWORDS] = {
 "xor_eq"
 };
 
-const int NUM_TYPE = 26; 
-static const char* types[NUM_TYPE] = {
+static const char* types[] = {
 "unsigned",
 "char",
 "unsigned char",
@@ -276,9 +274,10 @@ static const char* types[NUM_TYPE] = {
 "uint32_t",
 "uint64_t",
 "float",
-"double"
+"double",
 "bool",
 "size_t",
+"void"
 };
 
 inline std::ostream& operator << (std::ostream& out, const TokenType& t) {

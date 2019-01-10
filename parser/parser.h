@@ -74,6 +74,7 @@ public:
     void extract_extern_type();
     //void extract_tempalte();
     void extract_class();
+    void extract_typedef();
     void extract_stl_container();
 
     void debug(const std::string& debug_out);
@@ -81,6 +82,7 @@ public:
 private:
     bool is_in_marco(const std::string& m);
     bool is_in_class_struct(const std::string& name, bool& tm);
+    bool is_in_typedef(const std::string& name);
 private:
     std::vector<Token> _g_marco;//全局宏定义
     std::set<ClassType> _g_class;//全局class struct
@@ -88,8 +90,7 @@ private:
     std::set<std::string> _g_enum;//全局的枚举
     std::map<std::string, Parser*> _parsers;
 
-    std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来
-    
+    std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来    
 };
 
 #endif
