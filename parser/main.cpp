@@ -91,6 +91,8 @@ int main(int argc, char* argv[]) {
     parser_group.extract_class();
     parser_group.extract_typedef();
     parser_group.extract_stl_container();
+    parser_group.combine_type2();
+    parser_group.extract_class2();
     
     parser_group.debug("./result");
 

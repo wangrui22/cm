@@ -106,6 +106,7 @@ enum TokenType {
     CPP_CLASS_END,// class 结束的 {
     CPP_STRUCT_BEGIN,//struct 开始的 {
     CPP_STRUCT_END,//struct 结束的 }
+    CPP_MEMBER, //成员变量
 };
 
 struct Token {
@@ -113,8 +114,9 @@ struct Token {
     std::string val;
     int loc;
     //多遍的时候会合并到这里
-    //1 预处理语句 存在#的token中, ts后面是预处理语句的token
-    //2 类型 存储的主体类型, 具体的类型存储在token中, 如模板类型, 容器等
+    //1 CPP_PREPROCESS 预处理语句 存在#的token中, ts后面是预处理语句的token
+    //2 CPP_TYPE 类型, 会展开所有的类型 如模板类型, 容器等
+    //3 CPP_MEMBER 成员变量
     std::deque<Token> ts;
 
     //token 的主体
@@ -138,7 +140,14 @@ struct ClassFunction {
     int access;//0 public 1 protected 2 private
     std::string c_name;
     std::string fn_name;//function name
-    std::deque<Token> rets;//return tokens
+    std::deque<Token> rets;//origin return tokens
+    Token ret;//return token
+};
+
+struct ClassVariable {
+    std::string c_name;
+    std::string m_name;//member name
+    Token type;
 };
 
 //由namespace 或者 struct/class中定义
@@ -158,6 +167,10 @@ inline bool operator < (const ClassType& l,  const ClassType& r) {
 
 inline bool operator < (const ClassFunction& l,  const ClassFunction& r) {
     l.c_name+"::"+l.fn_name < r.c_name+"::"+r.fn_name;
+}
+
+inline bool operator < (const ClassVariable& l,  const ClassVariable& r) {
+    l.c_name+"::"+l.m_name < r.c_name+"::"+r.m_name;
 }
 
 static const char* keywords[] = {

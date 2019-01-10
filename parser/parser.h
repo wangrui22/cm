@@ -5,6 +5,7 @@
 #include <deque>
 #include <set>
 #include <map>
+#include <vector>
 #include "common.h"
 
 class Reader {
@@ -69,13 +70,15 @@ public:
     void add_parser(const std::string& file_name, Parser* parser);
     Parser* get_parser(const std::string& file_name);
 
+    //按顺序调用
     void extract_marco();
     void extract_enum();
     void extract_extern_type();
-    //void extract_tempalte();
     void extract_class();
     void extract_typedef();
     void extract_stl_container();
+    void combine_type2();
+    void extract_class2();
 
     void debug(const std::string& debug_out);
 
@@ -86,7 +89,8 @@ private:
 private:
     std::vector<Token> _g_marco;//全局宏定义
     std::set<ClassType> _g_class;//全局class struct
-    std::set<ClassFunction> _g_class_fn;//全局的class的成员函数
+    std::map<ClassType, std::vector<ClassFunction>> _g_class_fn;//全局的class的成员函数
+    std::map<ClassType, std::vector<ClassVariable>> _g_class_variable;//全局的class的成员变量
     std::set<std::string> _g_enum;//全局的枚举
     std::map<std::string, Parser*> _parsers;
 
