@@ -1184,7 +1184,13 @@ CLASS_SCOPE:
                             if (t->val == cur_c_name && (t-1)->type == CPP_COMPL) {
                                 //析构函数
                                 t->type = CPP_FUNCTION;
-                                class_fn.push_back({access, cur_c_name, "~"+t->val, std::deque<Token>(), Token()});
+                                t->val = "~"+t->val;
+                                t->subject = cur_c_name;
+                                class_fn.push_back({access, cur_c_name, t->val, std::deque<Token>(), Token()});
+
+                                //删除 ~
+                                --t;
+                                t = ts.erase(t);
 
                                 //跳过函数的括号组
                                 ++t;
@@ -1196,6 +1202,7 @@ CLASS_SCOPE:
                                 if ((t-1)->val == "explicit") {
                                     //肯定是构造函数
                                     t->type = CPP_FUNCTION;
+                                    t->subject = cur_c_name;
                                     class_fn.push_back({access, cur_c_name, t->val, std::deque<Token>(), Token()});
 
                                     ++t;
@@ -1227,6 +1234,7 @@ CLASS_SCOPE:
                                         // }
 
                                         t_may_c->type = CPP_FUNCTION;
+                                        t_may_c->subject = cur_c_name;
                                         class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
                                         
                                         ++t;
@@ -1236,10 +1244,12 @@ CLASS_SCOPE:
                                     } else if (t->type == CPP_OPEN_BRACE) {
                                         //构造函数体  是构造函数
                                         t_may_c->type = CPP_FUNCTION;
+                                        t_may_c->subject = cur_c_name;
                                         class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
                                     } else if (t->type == CPP_SEMICOLON) {
                                         //构造函数定义  是构造函数
                                         t_may_c->type = CPP_FUNCTION;
+                                        t_may_c->subject = cur_c_name;
                                         class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
                                     } else {
                                         //不是构造函数
@@ -1248,12 +1258,13 @@ CLASS_SCOPE:
                                 }
                             } else if(t->type == CPP_NAME && t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
                                 //可能是成员函数
-                                std::cout << "may function: " << t->val << std::endl;
+                                //std::cout << "may function: " << t->val << std::endl;
                                 auto t_may_c = t;
                                 ++t;
                                 jump_paren();
                                 if (t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
                                     t_may_c->type = CPP_FUNCTION;
+                                    t_may_c->subject = cur_c_name;
                                     class_fn.push_back({access, cur_c_name, t_may_c->val, recall_fn_ret(t_may_c), Token()});
                                 } else {
                                     //不是成员函数
@@ -1695,7 +1706,7 @@ void ParserGroup::combine_type2() {
 }
 
 void ParserGroup::extract_class2() {
-    //extract class member & function ret
+    //1 抽取成员变量, 细化成员函数的返回值
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
         std::deque<Token>& ts = parser._ts;
@@ -1810,6 +1821,43 @@ void ParserGroup::extract_class2() {
             } 
         }
     }
+
+    //2 把所有成员函数的定义处 标记成 CPP_FUNCTION
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            auto t_n = t+1;//type: class
+            auto t_nn = t+2;//::
+            auto t_nnn = t+3;//function
+            if (t_n == ts.end() || t_nn == ts.end() || t_nnn == ts.end()) {
+                ++t;
+                continue;
+            }
+
+            if (t_n->type == CPP_TYPE && t_nn->type == CPP_SCOPE && t_nnn->type == CPP_NAME) {
+                bool tm=false;
+                //TODO 这里会把静态类的函数调用也标记成CPP_FUNCTION, 对接口混淆没有影响
+                if (is_in_class_struct(t_n->val, tm)) {
+                    auto it_fns = _g_class_fn.find({t_n->val, false, tm, ""});
+                    assert(it_fns != _g_class_fn.end());
+                    for (auto it_fn = it_fns->second.begin(); it_fn != it_fns->second.end(); ++it_fn) {
+                        const ClassFunction& fn = *it_fn;
+                        if (fn.fn_name == t_nnn->val) {
+                            t_nnn->type = CPP_FUNCTION;
+                            t_nnn->subject = t_n->val;
+                            std::cout << "get class function definition: " << t_n->val << "::" << t_nnn->val << std::endl;
+                        }
+                    }
+                } 
+                t+= 3;
+                continue;
+            }
+
+            ++t;
+        }
+    }
+    
 }
 
 static inline void print_token(const Token& t, std::ofstream& out) {

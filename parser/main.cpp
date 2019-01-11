@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
         Util::get_all_file_recursion(src, post2,  c_file);
 
         for (size_t i=0; i<h_file.size(); ++i) {
-            std::cout << "parse file: " << h_file[i] << "\n";
+            std::cout << "lex file: " << h_file[i] << "\n";
 
             Reader* reader = new Reader();
             reader->read(h_file[i]);
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
         }
 
         for (size_t i=0; i<c_file.size(); ++i) {
-            std::cout << "parse file: " << c_file[i] << "\n";
+            std::cout << "lex file: " << c_file[i] << "\n";
 
             Reader* reader = new Reader();
             reader->read(c_file[i]);

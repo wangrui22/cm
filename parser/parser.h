@@ -71,6 +71,8 @@ public:
     void combine_type2();
     void extract_class2();
 
+    void label_call();
+
     void debug(const std::string& debug_out);
 
 private:
