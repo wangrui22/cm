@@ -100,14 +100,15 @@ enum TokenType {
     CPP_BR, //换行
     CPP_CONNECTOR, //连接符号 '\\'  /
     CPP_PREPROCESSOR, //预处理 和#连接的内容
-    CPP_FUNCTION, //过程, 目前只针对类成员函数
     CPP_ENUM,//枚举
     CPP_CLASS_BEGIN,// class 开始的 {
     CPP_CLASS_END,// class 结束的 {
     CPP_STRUCT_BEGIN,//struct 开始的 {
     CPP_STRUCT_END,//struct 结束的 }
+    CPP_MEMBER_FUNCTION, //成员函数
     CPP_MEMBER_VARIABLE, //成员变量
     CPP_GLOBAL_VARIABLE, //全局变量
+    CPP_FUNCTION,//定义在类外的过程
 };
 
 struct Token {
@@ -292,6 +293,13 @@ static const char* types[] = {
 "size_t",
 "void",
 "auto",
+"Sint8",//DCMTK typedef 
+"Uint8",
+"Sint32",
+"Uint32",
+"Uint16",
+"Float32",
+"Float64"
 };
 
 inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
@@ -494,8 +502,11 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
         case CPP_CONNECTOR: 
             out << "\\";
             break;
+        case CPP_MEMBER_FUNCTION:
+            out << "member function";
+            break;
         case CPP_FUNCTION:
-            out << "function";
+            out << "function0";
             break;
         case CPP_CLASS_BEGIN:
             out << "class begin";

@@ -763,12 +763,12 @@ void Parser::f1() {
         }
 
         //type
-        if (t->type == CPP_NAME && t->val == "size_t") {
-            t->type = CPP_TYPE;
-            ++t;
-            continue;
-        }
-        if (t->type == CPP_KEYWORD && is_type(t->val)) {
+        // if (t->type == CPP_NAME && t->val == "size_t") {
+        //     t->type = CPP_TYPE;
+        //     ++t;
+        //     continue;
+        // }
+        if ((t->type == CPP_KEYWORD || t->type == CPP_NAME) && is_type(t->val)) {
             t->type = CPP_TYPE;
             ++t;
             continue;
@@ -1195,7 +1195,7 @@ CLASS_SCOPE:
                             auto t_n = t+1;
                             if (t->val == cur_c_name && (t-1)->type == CPP_COMPL) {
                                 //析构函数
-                                t->type = CPP_FUNCTION;
+                                t->type = CPP_MEMBER_FUNCTION;
                                 t->val = "~"+t->val;
                                 t->subject = cur_c_name;
                                 class_fn.push_back({access, cur_c_name, t->val, std::deque<Token>(), Token()});
@@ -1213,7 +1213,7 @@ CLASS_SCOPE:
                                 //可能是构造函数
                                 if ((t-1)->val == "explicit") {
                                     //肯定是构造函数
-                                    t->type = CPP_FUNCTION;
+                                    t->type = CPP_MEMBER_FUNCTION;
                                     t->subject = cur_c_name;
                                     class_fn.push_back({access, cur_c_name, t->val, std::deque<Token>(), Token()});
 
@@ -1245,7 +1245,7 @@ CLASS_SCOPE:
                                         //     std::cout << "got it\n";
                                         // }
 
-                                        t_may_c->type = CPP_FUNCTION;
+                                        t_may_c->type = CPP_MEMBER_FUNCTION;
                                         t_may_c->subject = cur_c_name;
                                         class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
                                         
@@ -1255,12 +1255,12 @@ CLASS_SCOPE:
                                         }
                                     } else if (t->type == CPP_OPEN_BRACE) {
                                         //构造函数体  是构造函数
-                                        t_may_c->type = CPP_FUNCTION;
+                                        t_may_c->type = CPP_MEMBER_FUNCTION;
                                         t_may_c->subject = cur_c_name;
                                         class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
                                     } else if (t->type == CPP_SEMICOLON) {
                                         //构造函数定义  是构造函数
-                                        t_may_c->type = CPP_FUNCTION;
+                                        t_may_c->type = CPP_MEMBER_FUNCTION;
                                         t_may_c->subject = cur_c_name;
                                         class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
                                     } else {
@@ -1275,7 +1275,7 @@ CLASS_SCOPE:
                                 ++t;
                                 jump_paren();
                                 if (t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
-                                    t_may_c->type = CPP_FUNCTION;
+                                    t_may_c->type = CPP_MEMBER_FUNCTION;
                                     t_may_c->subject = cur_c_name;
                                     class_fn.push_back({access, cur_c_name, t_may_c->val, recall_fn_ret(t_may_c), Token()});
                                 } else {
@@ -1835,7 +1835,7 @@ void ParserGroup::extract_class2() {
                             assert(false);
                         }
                     }
-                    if (t->type == CPP_FUNCTION) {
+                    if (t->type == CPP_MEMBER_FUNCTION) {
                         //成员函数
                         if ((t-1)->type == CPP_TYPE) {
                             auto it_fc = _g_class_fn.find({cur_c_name, false,false,""});
@@ -1863,7 +1863,7 @@ void ParserGroup::extract_class2() {
         }
     }
 
-    //2 把所有成员函数的定义处 标记成 CPP_FUNCTION
+    //2 把所有成员函数的定义处 标记成 CPP_MEMBER_FUNCTION
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
         std::deque<Token>& ts = parser._ts;
@@ -1886,7 +1886,7 @@ void ParserGroup::extract_class2() {
                     for (auto it_fn = it_fns->second.begin(); it_fn != it_fns->second.end(); ++it_fn) {
                         const ClassFunction& fn = *it_fn;
                         if (fn.fn_name == t_nnn->val) {
-                            t_nnn->type = CPP_FUNCTION;
+                            t_nnn->type = CPP_MEMBER_FUNCTION;
                             t_nnn->subject = t_n->val;
                             std::cout << "get class function definition: " << t_n->val << "::" << t_nnn->val << std::endl;
                         }
@@ -1902,29 +1902,64 @@ void ParserGroup::extract_class2() {
     
 }
 
-void ParserGroup::extract_global_variable() {
+void ParserGroup::extract_global_var_fn() {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *it->second;
         std::deque<Token>& ts = parser._ts;
-        std::stack<Token> st;
-        std::cout << "parse global variable from : " << it->first << std::endl;
+        std::stack<Token> st_brace;//作用域最上层
+        std::stack<Token> st_paren;//不在()内,跳过函数参数表
+        //std::cout << "parse global variable from : " << it->first << std::endl;
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto t_n = t+1;
             auto t_nn = t+2;
             if (t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN || t->type == CPP_STRUCT_BEGIN) {
-                st.push(*t);
+                st_brace.push(*t);
             } else if (t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END || t->type == CPP_STRUCT_END) {
-                assert(st.top().type == CPP_OPEN_BRACE || st.top().type == CPP_CLASS_BEGIN || st.top().type == CPP_STRUCT_BEGIN);
-                st.pop();
-            } else if (st.empty() && t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
-                t_n->type == CPP_NAME && t_nn->type != CPP_OPEN_PAREN && t_nn->type != CPP_SCOPE &&//排除函数定义, 也是类型+name
+            assert(st_brace.top().type == CPP_OPEN_BRACE || st_brace.top().type == CPP_CLASS_BEGIN || st_brace.top().type == CPP_STRUCT_BEGIN);
+                st_brace.pop();
+            } if (t->type == CPP_OPEN_PAREN) {
+                st_paren.push(*t);
+            } else if (t->type == CPP_CLOSE_PAREN) {
+                assert(st_paren.top().type == CPP_OPEN_PAREN);
+                st_paren.pop();
+            } else if(t->val == "template" && t_n->type == CPP_LESS) {
+                //跳过模板参数
+                std::stack<Token> st_angle;//不在<>内, 跳过模板
+                ++t;
+                st_angle.push(*t);
+                ++t;
+                while(!st_angle.empty()) {
+                    if (t->type == CPP_GREATER) {
+                        assert(st_angle.top().type == CPP_LESS);
+                        st_angle.pop();
+                    } else if (t->type == CPP_LESS) {
+                        st_angle.push(*t);
+                    }
+                    ++t;
+                }
+                continue;
+
+            } else if (st_brace.empty() && st_paren.empty() && t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
+                t_n->type == CPP_NAME && t_nn->type != CPP_SCOPE &&//排除函数定义, 也是类型+name
                 ((t) == ts.begin() ||
-                (t-1)->type == CPP_OPEN_BRACE || 
-                (t-1)->type == CPP_CLOSE_BRACE ||
-                (t-1)->type == CPP_COMMENT ||
-                (t-1)->type == CPP_COLON ||
-                (t-1)->type == CPP_SEMICOLON)) {
-                //有可能是全局变量
+                (t-1)->type == CPP_OPEN_BRACE || //以 }结尾
+                (t-1)->type == CPP_COMMENT || //以注释结尾
+                (t-1)->type == CPP_MACRO || //以宏结尾
+                (t-1)->type == CPP_SEMICOLON || //以;结尾,另开一头
+                (t-1)->type == CPP_GREATER || //模板函数
+                (t-1)->val == "inline" ||//函数修饰符
+                (t-1)->val == "static" ||//函数修饰符
+                (t-1)->val == "const") ) { //函数修饰符
+                //有可能是全局变量  也有可能是类外的函数
+                
+                if (t_nn->type == CPP_OPEN_PAREN) {
+                    //是类外的函数
+                    t_n->type = CPP_FUNCTION;
+                    ++t;
+                    continue;
+                }
+
+                //是全局变量
                 Token& t_type = *t;
                 std::deque<Token*> to_be_m;
                 t++;
@@ -1935,8 +1970,9 @@ void ParserGroup::extract_global_variable() {
                     t++;
                 }
         CHECK_GLOBAL_VARIABLE_END:
-                if (t->type == CPP_SEMICOLON) {
-                    //之前的都是全局变量
+                //LABEL这里和成员变量不一样, 全局变量可以直接声明或者定义
+                if (t->type == CPP_SEMICOLON || t->type == CPP_EQ )  {
+                    //之前的都是全局变量, 
                     for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
                         (*it_to_be_m)->type = CPP_GLOBAL_VARIABLE;
                         _g_variable[(*it_to_be_m)->val] = t_type;
@@ -1992,7 +2028,7 @@ void ParserGroup::label_call()  {
                     if (t_p->type != CPP_POINTER && t_p->type != CPP_MULT && 
                         cs.find({scope_name, false, false,""}) != cs.end()) {
                         //直接调用, 而且函数所在的scope在 匹配的成员函数映射的类中
-                        t->type = CPP_FUNCTION;
+                        t->type = CPP_MEMBER_FUNCTION;
                     } else {
                         //回溯寻找类型
                         
@@ -2017,7 +2053,7 @@ void ParserGroup::label_call()  {
                 // std::set<ClassType> cs = is_in_class_function(t->val);
                 // if (!cs.empty()) {
                 //     //有可能是记录中的function, 回溯寻找主语
-                //     t->type = CPP_FUNCTION;
+                //     t->type = CPP_MEMBER_FUNCTION;
                 //     auto t_p = t-1; 
                 //     if (t_p->type != CPP_POINTER && t_p->type != CPP_MULT) {
                 //         //直接调用, 查找是不是在class中

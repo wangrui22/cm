@@ -70,7 +70,7 @@ public:
     void extract_stl_container();
     void combine_type2();
     void extract_class2();
-    void extract_global_variable();
+    void extract_global_var_fn();
 
     void label_call();
 
