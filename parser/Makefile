@@ -1,16 +1,23 @@
+ver = debug
+ifeq ($(ver), release)
+CFLAGS += -O3
+else
+CFLAGS += -g
+endif
+
 all: l1
 
 l1: parser.o main.o util.o
-	g++ -std=c++11 -g -o l1 main.o parser.o util.o -lpthread -lboost_system -lboost_filesystem -lboost_thread
+	g++ -std=c++11 $(CFLAGS) -o l1 main.o parser.o util.o -lpthread -lboost_system -lboost_filesystem -lboost_thread
 
 main.o: main.cpp parser.o util.o
-	g++ -std=c++11 -g -c main.cpp
+	g++ -std=c++11 $(CFLAGS) -c main.cpp
 
 parser.o: parser.cpp parser.h common.h util.o
-	g++ -std=c++11 -g -c parser.cpp
+	g++ -std=c++11 $(CFLAGS) -c parser.cpp
 
 util.o: util.cpp util.h
-	g++ -std=c++11 -g -c util.cpp
+	g++ -std=c++11 $(CFLAGS) -c util.cpp
 
 .PHONY: clean
 
