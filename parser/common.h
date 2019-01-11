@@ -151,6 +151,11 @@ struct ClassVariable {
     Token type;
 };
 
+struct Function {
+    std::string name;
+    Token ret;
+};
+
 //由namespace 或者 struct/class中定义
 struct ScopeType {
     std::string scope;
@@ -172,6 +177,10 @@ inline bool operator < (const ClassFunction& l,  const ClassFunction& r) {
 
 inline bool operator < (const ClassVariable& l,  const ClassVariable& r) {
     l.c_name+"::"+l.m_name < r.c_name+"::"+r.m_name;
+}
+
+inline bool operator < (const Function& l,  const Function& r) {
+    l.name < r.name;
 }
 
 static const char* keywords[] = {
