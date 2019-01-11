@@ -360,7 +360,7 @@ Token Parser::lex(Reader* cpp_reader) {
 
         case '>': {
             char nc = cpp_reader->next_char();
-            //TODO 运算符右移 和 模板有冲突
+            //LABEL 运算符右移 和 模板有冲突 在语义分析的时候再解决
             // if (nc == '>') {
             //     return {CPP_RSHIFT, ">>", cpp_reader->get_cur_loc()-1};
             // } else 
@@ -1021,7 +1021,7 @@ void ParserGroup::extract_class() {
 
                 next_class_template = (t->val == "class" || t->val == "struct");
             } else if (t->val == "class" || t->val == "struct") {
-                //TODO 看除了template后的第一个关键字是否是class或者struct从而判断是不是模板类
+                //LABEL 看除了template后的第一个关键字是否是class或者struct从而判断是不是模板类
                 //排除类前面跟着的修饰符： 一般是宏定义 或者 是关键字
                 auto t_n = t+1;
 
@@ -1074,18 +1074,30 @@ CLASS_SCOPE:
                     //找到继承的关系
                     if ((t+2)!=ts.end() && (t+3)!=ts.end() && (t+3)!=ts.end() &&
                         (t+2)->val == "std" && (t+3)->type == CPP_SCOPE && (t+4)->val == "enable_shared_from_this") {
-                        //TODO 这里不处理直接继承enable_shared_from_this的情况
+                        //LABEL 这里不处理直接继承enable_shared_from_this的情况
                         //std::cout << "catch enable_shared_from_this\n";
                         ++t;
                         goto CLASS_SCOPE;
                     } else if ((t+2)!=ts.end() && ((t+2)->type == CPP_NAME || (t+2)->type == CPP_CLASS || (t+2)->type == CPP_STURCT)) {
-                        std::set<ClassType>::iterator t_c = _g_class.find({cur_c_name, is_struct, false, ""});
-                        if (t_c != _g_class.end()) {
-                            _g_class.erase(t_c);
+                        if ((t+3)!= ts.end() && (t+3)->type == CPP_SCOPE && (t+4)!= ts.end()) {
+                            //继承自 std:: 或者 boost::
+                            //TODO 这里只读取一层
+                            std::set<ClassType>::iterator t_c = _g_class.find({cur_c_name, is_struct, false, ""});
+                            if (t_c != _g_class.end()) {
+                                _g_class.erase(t_c);
+                            }
+                            _g_class.insert({t_n->val, is_struct, next_class_template, (t+2)->val+"::"+(t+4)->val});
+                            t+=3;
+                        } else {
+                            std::set<ClassType>::iterator t_c = _g_class.find({cur_c_name, is_struct, false, ""});
+                            if (t_c != _g_class.end()) {
+                                _g_class.erase(t_c);
+                            }
+                            _g_class.insert({t_n->val, is_struct, next_class_template, (t+2)->val});
+                            t+=2;
                         }
-                        _g_class.insert({t_n->val, is_struct, next_class_template, (t+2)->val});
+                        
                         //std::cout << "catch father class\n";
-                        ++t;
                         goto CLASS_SCOPE;
                     }  
                                     
@@ -1133,7 +1145,7 @@ CLASS_SCOPE:
 
                         std::function<std::deque<Token>(std::deque<Token>::iterator)> recall_fn_ret = [&ts](std::deque<Token>::iterator it_cf) {
                             //找上一个 ; } comments 
-                            //TODO 如果是模板函数会带tempalte<[*]>
+                            //LABEL 如果是模板函数会带tempalte<[*]>
                             std::stack<Token> srets;
                             auto t = it_cf-1;
                             while(!(t->type == CPP_SEMICOLON || t->type == CPP_COMMENT || t->type == CPP_CLOSE_BRACE || t->type == CPP_COLON)) {
@@ -1288,6 +1300,43 @@ CLASS_SCOPE:
                 ++t;
             }
         }   
+    }
+
+    //分析class的继承关系
+    for (auto it_c = _g_class.begin(); it_c != _g_class.end(); ++it_c) {
+        _g_class_childs[*it_c] = std::set<ClassType>();
+    }
+
+    bool steady = true;
+    while(steady) {
+        steady = true;
+        for (auto it_c = _g_class_childs.begin(); it_c != _g_class_childs.end(); ++it_c) {
+            const ClassType& c = it_c->first;
+            if (!c.father.empty()) {
+                auto it_base = _g_class_childs.find({c.father,false,false,""});
+                if (it_base == _g_class_childs.end()) {
+                    //TODO 从三方模块继承, 这种类需要单独标记出来,不能混淆成员函数
+                    continue;
+                }
+
+                //assert(it_base != _g_class_childs.end());
+
+                auto it_item = it_base->second.find(c);
+                if (it_item == it_base->second.end()) {
+                    it_base->second.insert(c);
+                    steady = false;
+                }
+
+                //把class的child都添加到class的base中去
+                for (auto it_cc = it_c->second.begin(); it_cc != it_c->second.end(); ++it_cc) {
+                    it_item = it_base->second.find(*it_cc);
+                    if (it_item == it_base->second.end()) {
+                        it_base->second.insert(*it_cc);
+                        steady = false;
+                    }
+                }
+            }
+        }
     }
 
     //解析class struct 的 type
@@ -1713,10 +1762,6 @@ void ParserGroup::extract_class2() {
         std::string cur_c_name;
 
         for (auto t = ts.begin(); t != ts.end(); ) {
-
-            //---------------------------------------------------------//
-            //common function
-
             if (t->type == CPP_CLASS) {
                 cur_c_name = t->val;
                 ++t;
@@ -1725,7 +1770,8 @@ void ParserGroup::extract_class2() {
                 cur_c_name = t->val;
                 ++t;
                 continue;
-            } else if (t->type == CPP_CLASS_BEGIN) {
+            } else if (t->type == CPP_CLASS_BEGIN || t->type == CPP_STRUCT_BEGIN) {
+                const TokenType end_scope = t->type == CPP_CLASS_BEGIN ? CPP_CLASS_END: CPP_STRUCT_END;
                 ++t;
                 std::stack<Token> ts_brace;
                 auto it_class = _g_class.find({cur_c_name, false, false, ""});
@@ -1734,7 +1780,7 @@ void ParserGroup::extract_class2() {
                 _g_class_variable[*it_class] = std::vector<ClassVariable>();
                 std::vector<ClassVariable>& class_variable = _g_class_variable.find(*it_class)->second;
 
-                while(t != ts.end() && t->type != CPP_CLASS_END) {
+                while(t != ts.end() && t->type != end_scope) {
                     //仅仅在class的第一层作用域提取
                     if (t->type == CPP_OPEN_BRACE) {
                         ts_brace.push(*t);
@@ -1771,7 +1817,7 @@ void ParserGroup::extract_class2() {
                         if (t->type == CPP_SEMICOLON) {
                             //之前的都是成员变量
                             for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
-                                (*it_to_be_m)->type = CPP_MEMBER;
+                                (*it_to_be_m)->type = CPP_MEMBER_VARIABLE;
                                 (*it_to_be_m)->ts.push_back(t_type);
                                 class_variable.push_back({cur_c_name, (*it_to_be_m)->val, t_type});
                             }
@@ -1811,11 +1857,6 @@ void ParserGroup::extract_class2() {
 
                 cur_c_name = "";
                 
-            } else if (t->type == CPP_STRUCT_BEGIN) {
-                ++t;
-
-                cur_c_name = "";
-
             } else {
                 ++t;
             } 
@@ -1837,7 +1878,8 @@ void ParserGroup::extract_class2() {
 
             if (t_n->type == CPP_TYPE && t_nn->type == CPP_SCOPE && t_nnn->type == CPP_NAME) {
                 bool tm=false;
-                //TODO 这里会把静态类的函数调用也标记成CPP_FUNCTION, 对接口混淆没有影响
+                //LABEL 1 这里会把静态类的函数调用也标记成CPP_FUtN, 对接口混淆没有影响
+                //LABEL 2 这里会把thread引用类成员函数作为入口函数,也标记成CPP_FUNCTION, 对接口混淆没有影响
                 if (is_in_class_struct(t_n->val, tm)) {
                     auto it_fns = _g_class_fn.find({t_n->val, false, tm, ""});
                     assert(it_fns != _g_class_fn.end());
@@ -1858,6 +1900,158 @@ void ParserGroup::extract_class2() {
         }
     }
     
+}
+
+void ParserGroup::extract_global_variable() {
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+        std::stack<Token> st;
+        std::cout << "parse global variable from : " << it->first << std::endl;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            auto t_n = t+1;
+            auto t_nn = t+2;
+            if (t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN || t->type == CPP_STRUCT_BEGIN) {
+                st.push(*t);
+            } else if (t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END || t->type == CPP_STRUCT_END) {
+                assert(st.top().type == CPP_OPEN_BRACE || st.top().type == CPP_CLASS_BEGIN || st.top().type == CPP_STRUCT_BEGIN);
+                st.pop();
+            } else if (st.empty() && t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
+                t_n->type == CPP_NAME && t_nn->type != CPP_OPEN_PAREN && t_nn->type != CPP_SCOPE &&//排除函数定义, 也是类型+name
+                ((t) == ts.begin() ||
+                (t-1)->type == CPP_OPEN_BRACE || 
+                (t-1)->type == CPP_CLOSE_BRACE ||
+                (t-1)->type == CPP_COMMENT ||
+                (t-1)->type == CPP_COLON ||
+                (t-1)->type == CPP_SEMICOLON)) {
+                //有可能是全局变量
+                Token& t_type = *t;
+                std::deque<Token*> to_be_m;
+                t++;
+                while(t->type == CPP_NAME || t->type == CPP_COMMA) {
+                    if (t->type == CPP_NAME) {
+                        to_be_m.push_back(&(*t));
+                    }
+                    t++;
+                }
+        CHECK_GLOBAL_VARIABLE_END:
+                if (t->type == CPP_SEMICOLON) {
+                    //之前的都是全局变量
+                    for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
+                        (*it_to_be_m)->type = CPP_GLOBAL_VARIABLE;
+                        _g_variable[(*it_to_be_m)->val] = t_type;
+                    }
+                } else {
+                    if (t->type == CPP_OPEN_SQUARE) {
+                        //跳过数组(可以跳过多个)
+                        ++t;
+                        while(t->type != CPP_CLOSE_SQUARE) {
+                            ++t;
+                        }
+                        ++t;
+                        goto CHECK_GLOBAL_VARIABLE_END;
+                    }
+                    assert(false);
+                }
+            }
+
+            ++t;
+        }
+    }
+}
+
+void ParserGroup::label_call()  {
+    //过程调用的语法为 [主语[->/.]]function(paras)
+    //这里用笨方法,将所有的name都和function匹配
+
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *it->second;
+        std::deque<Token>& ts = parser._ts;
+
+        //-----------------------------------------------//
+        //common function
+        // std::function<bool(std::deque<Token>::iterator& t, const std::string&, const std::string&)> check_function =
+        // [this, &ts](std::deque<Token>::iterator& t, const std::string& scope_name, const std::string& fn_name) {
+            
+        // };
+
+        std::function<void(std::deque<Token>::iterator& t, const std::string&)> label_function = 
+        [this, &ts](std::deque<Token>::iterator& t, const std::string& scope_name) {
+            auto t_n = t+1;
+            if (t->type == CPP_NAME && t_n->type == CPP_OPEN_PAREN) {
+                if ((t-1) != ts.end() && (t-1)->type == CPP_SCOPE) {
+                    // 全局函数
+                    t+=2;
+                    return;
+                }
+                
+                std::set<ClassType> cs = is_in_class_function(t->val);
+                if (!cs.empty()) {
+                    //有可能是记录中的function, 回溯寻找主语
+                    auto t_p = t-1;
+                    if (t_p->type != CPP_POINTER && t_p->type != CPP_MULT && 
+                        cs.find({scope_name, false, false,""}) != cs.end()) {
+                        //直接调用, 而且函数所在的scope在 匹配的成员函数映射的类中
+                        t->type = CPP_FUNCTION;
+                    } else {
+                        //回溯寻找类型
+                        
+                    }
+                }
+                t+=2;
+            }
+        };
+        //-----------------------------------------------//
+
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            auto t_n = t+1;
+            auto t_nn = t+2;
+
+            if (t->type == CPP_NAME && t_n->type == CPP_OPEN_PAREN) {
+                // if ((t-1) != ts.end() && (t-1)->type == CPP_SCOPE) {
+                //     // 全局函数
+                //     t+=2;
+                //     continue;
+                // }
+                
+                // std::set<ClassType> cs = is_in_class_function(t->val);
+                // if (!cs.empty()) {
+                //     //有可能是记录中的function, 回溯寻找主语
+                //     t->type = CPP_FUNCTION;
+                //     auto t_p = t-1; 
+                //     if (t_p->type != CPP_POINTER && t_p->type != CPP_MULT) {
+                //         //直接调用, 查找是不是在class中
+                        
+                //     }
+                // }
+                t+=2;
+            } else {
+                ++t;
+            }
+
+            // if (t->type == CPP_CLASS) {
+            //     cur_c_name = t->val;
+            //     ++t;
+            //     continue;
+            // } else if (t->type == CPP_STURCT) {
+            //     cur_c_name = t->val;
+            //     ++t;
+            //     continue;
+            // } else if (t->type == CPP_CLASS_BEGIN || t->type == CPP_STRUCT_BEGIN) {
+            //     //在类/结构体 定义中, 可能会有成员函数的直接调用
+            //     const TokenType end_scope = t->type == CPP_CLASS_BEGIN ? CPP_CLASS_END: CPP_STRUCT_END;
+            //     ++t;
+            //     std::stack<Token> ts_brace;
+            //     auto it_class = _g_class.find({cur_c_name, false, false, ""});
+            //     assert(it_class != _g_class.end());
+
+            //     while(t != ts.end() && t->type != end_scope) {
+            //         //标记过程调用
+
+            //     }
+            // } 
+        }
+    }
 }
 
 static inline void print_token(const Token& t, std::ofstream& out) {
@@ -1932,8 +2126,19 @@ void ParserGroup::debug(const std::string& debug_out) {
             if (!it->father.empty()) {
                 out << " public : " << it->father;
             }
+            out << "\t";
+
+            //print child 
+            out << "child: ";
+            auto it_c = _g_class_childs.find(*it);
+            if (it_c != _g_class_childs.end()) {
+                for (auto it_cc = it_c->second.begin(); it_cc != it_c->second.end(); ++it_cc) {
+                    out << it_cc->name << " ";
+                }
+            }
             out << "\n";
         }
+
         out.close();
     }
 
@@ -2023,6 +2228,22 @@ void ParserGroup::debug(const std::string& debug_out) {
         }
         out.close();
     }
+
+    //print globale variable
+    {
+        const std::string f = debug_out+"/global_variable";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            return;
+        }
+        for (auto it = _g_variable.begin(); it != _g_variable.end(); ++it) {
+            out << it->first << " type: ";
+            print_token(it->second, out);
+            out << std::endl;
+        }
+        out.close();
+    }
 }
 
 bool ParserGroup::is_in_marco(const std::string& m) {
@@ -2056,4 +2277,26 @@ bool ParserGroup::is_in_typedef(const std::string& name) {
     }
 
     return false;
+}
+
+std::set<ClassType> ParserGroup::is_in_class_function(const std::string& name) {
+    //TODO 这里暂时没有处理 access, 目前都认为是public的
+    std::set<ClassType> cs;
+    for (auto it_fns = _g_class_fn.begin(); it_fns != _g_class_fn.end(); ++it_fns) {
+        const ClassType& c = it_fns->first;
+        for (auto it_fn = it_fns->second.begin(); it_fn != it_fns->second.end(); ++it_fn) {
+            const ClassFunction& fn = *it_fn;
+            if (fn.fn_name == name) {
+                cs.insert(it_fns->first);
+                //所有的child都可以调用该方法
+                auto it_fc = _g_class_childs.find(c);
+                for (auto it_fcc = it_fc->second.begin(); it_fcc != it_fc->second.end(); ++it_fcc) {
+                    cs.insert(*it_fcc);
+                }
+                break;
+            }
+        }
+    }
+
+    return std::move(cs);
 }

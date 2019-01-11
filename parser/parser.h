@@ -70,6 +70,7 @@ public:
     void extract_stl_container();
     void combine_type2();
     void extract_class2();
+    void extract_global_variable();
 
     void label_call();
 
@@ -79,17 +80,21 @@ private:
     bool is_in_marco(const std::string& m);
     bool is_in_class_struct(const std::string& name, bool& tm);
     bool is_in_typedef(const std::string& name);
+    std::set<ClassType> is_in_class_function(const std::string& name);
 private:
     std::map<std::string, Parser*> _parsers;
     std::map<std::string, Reader*> _readers;
 
     std::vector<Token> _g_marco;//全局宏定义
     std::set<ClassType> _g_class;//全局class struct
+    std::map<ClassType, std::set<ClassType>> _g_class_childs;//全局的子类
     std::map<ClassType, std::vector<ClassFunction>> _g_class_fn;//全局的class的成员函数
     std::map<ClassType, std::vector<ClassVariable>> _g_class_variable;//全局的class的成员变量
     std::set<std::string> _g_enum;//全局的枚举
 
-    std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来  
+    std::map<std::string, Token> _g_variable;//全局变量<名称,type_token>
+
+    std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来
 };
 
 #endif

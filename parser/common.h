@@ -106,7 +106,8 @@ enum TokenType {
     CPP_CLASS_END,// class 结束的 {
     CPP_STRUCT_BEGIN,//struct 开始的 {
     CPP_STRUCT_END,//struct 结束的 }
-    CPP_MEMBER, //成员变量
+    CPP_MEMBER_VARIABLE, //成员变量
+    CPP_GLOBAL_VARIABLE, //全局变量
 };
 
 struct Token {
@@ -116,7 +117,7 @@ struct Token {
     //多遍的时候会合并到这里
     //1 CPP_PREPROCESS 预处理语句 存在#的token中, ts后面是预处理语句的token
     //2 CPP_TYPE 类型, 会展开所有的类型 如模板类型, 容器等
-    //3 CPP_MEMBER 成员变量
+    //3 CPP_MEMBER_VARIABLE 成员变量
     std::deque<Token> ts;
 
     //token 的主体
@@ -125,7 +126,6 @@ struct Token {
     //              主要有两种情况:1 class内部定义的typedef 2 模板函数的模板类型
     //function 类型: 如果是空则是全局的
     //               如果有值则作用域为subject(这里是class名)
-
     std::string subject;
 };
 
@@ -290,7 +290,8 @@ static const char* types[] = {
 "double",
 "bool",
 "size_t",
-"void"
+"void",
+"auto",
 };
 
 inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
@@ -507,6 +508,12 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             break;
         case CPP_STRUCT_END:
             out << "struct end";
+            break;
+        case CPP_GLOBAL_VARIABLE:
+            out << "global variable: ";
+            break;
+        case CPP_MEMBER_VARIABLE:
+            out << "member variable: ";
             break;
         default:
             out << "INVALID";
