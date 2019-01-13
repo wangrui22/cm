@@ -67,7 +67,7 @@ public:
     void extract_extern_type();
     void extract_class();
     void extract_typedef();
-    void extract_stl_container();
+    void extract_container();
     void combine_type2();
     void extract_class2();
     void extract_global_var_fn();
@@ -82,6 +82,9 @@ private:
     bool is_in_typedef(const std::string& name);
     std::set<ClassType> is_in_class_function(const std::string& name);//待测试 好像没有用
     bool is_member_function(const std::string& c_name, const std::string& fn_name);
+    bool is_member_function(const std::string& c_name, const std::string& fn_name, Token& ret);
+    bool is_member_variable(const std::string& c_name, const std::string& c_v_name, Token& t_type);
+    bool is_global_variable(const std::string& v_name, Token& t_type);
 private:
     std::vector<std::string> _file_name;
     std::vector<Parser*> _parsers;

@@ -109,6 +109,7 @@ enum TokenType {
     CPP_MEMBER_VARIABLE, //成员变量
     CPP_GLOBAL_VARIABLE, //全局变量
     CPP_FUNCTION,//定义在类外的过程
+    CPP_CALL,//函数调用
 };
 
 struct Token {
