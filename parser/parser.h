@@ -71,6 +71,7 @@ public:
     void combine_type2();
     void extract_class2();
     void extract_global_var_fn();
+    void extract_typedef2();//重新构造typedef 的类型
 
     void label_call();
 
@@ -80,6 +81,7 @@ private:
     bool is_in_marco(const std::string& m);
     bool is_in_class_struct(const std::string& name, bool& tm);
     bool is_in_typedef(const std::string& name);
+    bool is_in_typedef(const std::string& name, Token& t_type);
     std::set<ClassType> is_in_class_function(const std::string& name);//待测试 好像没有用
     bool is_member_function(const std::string& c_name, const std::string& fn_name);
     bool is_member_function(const std::string& c_name, const std::string& fn_name, Token& ret);
