@@ -2310,9 +2310,6 @@ void ParserGroup::extract_local_var_fn() {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         std::string file_name = _file_name[file_idx++];
-        if (file_name == "mi_gl_program.cpp") {
-            std::cout << "got it";
-        }
         bool is_cpp = false;
         if (file_name.size() > 2 && file_name.substr(file_name.size()-4, 5) == ".cpp") {
             is_cpp = true;
@@ -2387,9 +2384,6 @@ void ParserGroup::extract_local_var_fn() {
                 (t-1)->val == "static" ||//函数修饰符
                 (t-1)->val == "const" ||//函数修饰符
                 (in_annoy && (t-1)->type==CPP_OPEN_BRACE)) ) { //namespace {后的第一个方程
-                if (t_n->val == "GetShaderTypeString") {
-                    std::cout << "got it";
-                }
                 //有可能是全局变量  也有可能是类外的函数
                 if (t_nn->type == CPP_OPEN_PAREN) {
                     //是类外的函数 
@@ -2711,21 +2705,27 @@ void ParserGroup::label_call()  {
                         if ((t_p->type != CPP_DOT && t_p->type != CPP_POINTER)) {
                             //源头
                             const std::string inner_fn_name = t->val;
+                            Token ret;
                             //1.1 匹配全局函数
-                            auto it_f0 = _g_functions.find({inner_fn_name, Token()});
-                            if( it_f0 !=  _g_functions.end()) {
-                                root_type = it_f0->ret;
+                            if (is_global_function(inner_fn_name, ret)) {
+                                root_type = ret;
                                 break;
                             }
                             
                             assert(!class_name.empty());
 
                             //1.2 匹配成员函数
-                            //把该类以及基类的方法拿出来查看
-                            Token ret;
-                            assert(is_member_function(class_name, inner_fn_name, ret));
-                            root_type = ret;
-                            break;
+                            //把该类以及基类的方法拿出来查看 TODO 这里不区分access
+                            if(is_member_function(class_name, inner_fn_name, ret)) {
+                                root_type = ret;
+                                break;
+                            }
+
+                            //1.3 匹配局部函数
+                            if (is_local_function(file_name, inner_fn_name, ret)) {
+                                root_type = ret;
+                                break;
+                            }
                         }
 
                         s_list.push(*t);
@@ -2855,7 +2855,8 @@ void ParserGroup::label_call()  {
             ///\ 2 查看是否没有主语
             if ((t-1)->type != CPP_POINTER && (t-1)->type != CPP_DOT) {
                 //1.1 匹配全局函数
-                if(_g_functions.find({fn_name, Token()}) != _g_functions.end()) {
+                Token ret;
+                if (is_global_function(fn_name, ret)) {
                     std::cout << "is global fn\n";
                     return true;
                 }
@@ -3433,6 +3434,42 @@ bool ParserGroup::is_global_variable(const std::string& v_name, Token& t_type) {
     auto it_v = _g_variable.find(v_name);
     if (it_v != _g_variable.end()) {
         t_type = it_v->second;
+        return true;
+    }
+
+    return false;
+}
+
+bool ParserGroup::is_local_variable(const std::string& file_name, const std::string& v_name, Token& ret_type) {
+    auto it_vs = _local_variable.find(file_name);
+    if(it_vs != _local_variable.end()) {
+        auto it_v = it_vs->second.find(v_name);
+        if (it_v != it_vs->second.end()) {
+            ret_type = it_v->second;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ParserGroup::is_local_function(const std::string& file_name, const std::string& fn_name, Token& ret_type) {
+    auto it_fns = _local_functions.find(file_name);
+    if(it_fns != _local_functions.end()) {
+        auto it_fn = it_fns->second.find({fn_name, Token()});
+        if (it_fn != it_fns->second.end()) {
+            ret_type = it_fn->ret;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ParserGroup::is_global_function(const std::string& fn_name, Token& ret) {
+    auto it_fn = _g_functions.find({fn_name, Token()});
+    if (it_fn != _g_functions.end()) {
+        ret = it_fn->ret;
         return true;
     }
 

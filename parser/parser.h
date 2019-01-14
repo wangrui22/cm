@@ -83,11 +83,18 @@ private:
     bool is_in_class_struct(const std::string& name, bool& tm);
     bool is_in_typedef(const std::string& name);
     bool is_in_typedef(const std::string& name, Token& t_type);
+    
     std::set<ClassType> is_in_class_function(const std::string& name);//待测试 好像没有用
+    
     bool is_member_function(const std::string& c_name, const std::string& fn_name);
     bool is_member_function(const std::string& c_name, const std::string& fn_name, Token& ret);
+    bool is_local_function(const std::string& file_name, const std::string& fn_name, Token& t_type);
+    bool is_global_function(const std::string& fn_name, Token& ret);
+
     bool is_member_variable(const std::string& c_name, const std::string& c_v_name, Token& t_type);
     bool is_global_variable(const std::string& v_name, Token& t_type);
+    bool is_local_variable(const std::string& file_name, const std::string& v_name, Token& t_type);
+
 private:
     std::vector<std::string> _file_name;
     std::vector<Parser*> _parsers;
