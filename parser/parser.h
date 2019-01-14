@@ -71,6 +71,7 @@ public:
     void combine_type2();
     void extract_class2();
     void extract_global_var_fn();
+    void extract_local_var_fn();
     void extract_typedef2();//重新构造typedef 的类型
 
     void label_call();
@@ -102,6 +103,7 @@ private:
     std::set<std::string> _g_enum;//全局的枚举
 
     std::map<std::string, Token> _g_variable;//全局变量<名称,type_token>
+    std::map<std::string, std::map<std::string, Token>> _local_variable;//局部变量<文件名,<名称,type_token>>
 
     std::set<Function> _g_functions;//全局函数
     std::map<std::string, std::set<Function>> _local_functions;//cpp的局部函数

@@ -96,8 +96,9 @@ int main(int argc, char* argv[]) {
     parser_group.combine_type2();
     parser_group.extract_class2();
     parser_group.extract_global_var_fn();
+    parser_group.extract_local_var_fn();
     parser_group.extract_typedef2();
-    parser_group.label_call();
+    //parser_group.label_call();
     
     parser_group.debug("./result");
 

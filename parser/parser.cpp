@@ -2160,8 +2160,23 @@ void ParserGroup::extract_class2() {
 }
 
 void ParserGroup::extract_global_var_fn() {
+    //只在h文件中找
+    int file_idx=0;
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
+        std::string file_name = _file_name[file_idx++];
+        bool is_h = false;
+        if (file_name.size() > 2 && file_name.substr(file_name.size()-2, 2) == ".h") {
+            is_h = true;
+        } else if (file_name.size() > 4 && file_name.substr(file_name.size()-4, 4) == ".hpp") {
+            is_h = true;
+        } else {
+            is_h = false;   
+        }
+        if (!is_h) {
+            continue;
+        }
+
         std::deque<Token>& ts = parser._ts;
         std::stack<Token> st_brace;//作用域最上层
         std::stack<Token> st_paren;//不在()内,跳过函数参数表
@@ -2196,7 +2211,9 @@ void ParserGroup::extract_global_var_fn() {
                 }
                 continue;
 
-            } else if (st_brace.empty() && st_paren.empty() && t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
+            } 
+            //全局变量的提取
+            else if (st_brace.empty() && st_paren.empty() && t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
                 t_n->type == CPP_NAME && t_nn->type != CPP_SCOPE &&//排除函数定义, 也是类型+name
                 ((t) == ts.begin() ||
                 (t-1)->type == CPP_OPEN_BRACE || //以 }结尾
@@ -2213,7 +2230,12 @@ void ParserGroup::extract_global_var_fn() {
                     //是类外的函数 
                     //如果是h文件中的,则作为全局函数, 如果是cpp中的则作为局部函数
                     t_n->type = CPP_FUNCTION;
-                    
+
+                    Function fn;
+                    fn.name = t_n->val;
+                    fn.ret = *t;
+                    _g_functions.insert(fn);
+
                     ++t;
                     continue;
                 }
@@ -2248,13 +2270,203 @@ void ParserGroup::extract_global_var_fn() {
                     }
                     assert(false);
                 }
+            } 
+            //全局函数的提取, 寻找 fn(
+            else if (st_brace.empty() && st_paren.empty() && t->type == CPP_NAME && 
+                t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
+                //可能是函数
+                //找前一步type
+                auto t_p = t-1;
+                bool get_fn_type = false;
+                while(t_p != ts.begin()) {
+                    if (t_p->type == CPP_TYPE) {
+                        get_fn_type = true;
+                        break;
+                    } else if (t_p->type == CPP_MACRO) {
+                        //TODO 展开宏
+                        //LABEL 这里不展开宏,直接跳过
+                        --t_p;
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+                if (get_fn_type) {
+                    Function fn;
+                    fn.name = t->val;
+                    fn.ret = *t_p;
+                    _g_functions.insert(fn);
+                }
             }
-
             ++t;
         }
     }
 }
 
+void ParserGroup::extract_local_var_fn() {
+    //局部函数是cpp文件中以static开头的函数, cpp中不写static的有可能是全局函数
+    //只在cpp文件中找
+    int file_idx=0;
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *(*it);
+        std::string file_name = _file_name[file_idx++];
+        if (file_name == "mi_gl_program.cpp") {
+            std::cout << "got it";
+        }
+        bool is_cpp = false;
+        if (file_name.size() > 2 && file_name.substr(file_name.size()-4, 5) == ".cpp") {
+            is_cpp = true;
+        } else {
+            is_cpp = false;   
+        }
+        if (!is_cpp) {
+            continue;
+        }
+
+        _local_variable[file_name] = std::map<std::string, Token>();
+        std::map<std::string, Token>& local_variable = _local_variable[file_name]; 
+        _local_functions[file_name] = std::set<Function>();
+        std::set<Function>& local_fn = _local_functions[file_name];
+
+        std::deque<Token>& ts = parser._ts;
+        std::stack<Token> st_brace;//作用域最上层
+        std::stack<Token> st_paren;//不在()内,跳过函数参数表
+        //std::cout << "parse global variable from : " << it->first << std::endl;
+        bool in_annoy = false;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            auto t_n = t+1;
+            auto t_nn = t+2;
+            if (t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN || t->type == CPP_STRUCT_BEGIN) {
+                st_brace.push(*t);
+            } else if (t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END || t->type == CPP_STRUCT_END) {
+                assert(st_brace.top().type == CPP_OPEN_BRACE || st_brace.top().type == CPP_CLASS_BEGIN || st_brace.top().type == CPP_STRUCT_BEGIN);
+                st_brace.pop();
+                if (in_annoy && st_brace.empty()) {
+                    in_annoy = false;
+                }
+            } if (t->type == CPP_OPEN_PAREN) {
+                st_paren.push(*t);
+            } else if (t->type == CPP_CLOSE_PAREN) {
+                assert(st_paren.top().type == CPP_OPEN_PAREN);
+                st_paren.pop();
+            } else if(t->val == "template" && t_n->type == CPP_LESS) {
+                //跳过模板参数
+                std::stack<Token> st_angle;//不在<>内, 跳过模板
+                ++t;
+                st_angle.push(*t);
+                ++t;
+                while(!st_angle.empty()) {
+                    if (t->type == CPP_GREATER) {
+                        assert(st_angle.top().type == CPP_LESS);
+                        st_angle.pop();
+                    } else if (t->type == CPP_LESS) {
+                        st_angle.push(*t);
+                    }
+                    ++t;
+                }
+                continue;
+
+            } 
+            else if (st_brace.empty() && t->val == "namespace" && t_n != ts.end() && t_n->type == CPP_OPEN_BRACE) {
+                //匿名函数
+                st_brace.push(*t_n);
+                in_annoy = true;
+                ++t;
+                ++t;    
+                continue;
+            }
+            //全局变量的提取
+            else if ((st_brace.empty() || in_annoy) && st_paren.empty() && t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
+                t_n->type == CPP_NAME && t_nn->type != CPP_SCOPE &&//排除函数定义, 也是类型+name
+                ((t) == ts.begin() ||
+                (t-1)->type == CPP_COMMENT || //以注释结尾
+                (t-1)->type == CPP_MACRO || //以宏结尾
+                (t-1)->type == CPP_SEMICOLON || //以;结尾,另开一头
+                (t-1)->type == CPP_GREATER || //模板函数
+                (t-1)->val == "inline" ||//函数修饰符
+                (t-1)->val == "static" ||//函数修饰符
+                (t-1)->val == "const" ||//函数修饰符
+                (in_annoy && (t-1)->type==CPP_OPEN_BRACE)) ) { //namespace {后的第一个方程
+                if (t_n->val == "GetShaderTypeString") {
+                    std::cout << "got it";
+                }
+                //有可能是全局变量  也有可能是类外的函数
+                if (t_nn->type == CPP_OPEN_PAREN) {
+                    //是类外的函数 
+                    //如果是h文件中的,则作为全局函数, 如果是cpp中的则作为局部函数
+                    t_n->type = CPP_FUNCTION;
+
+                    Function fn;
+                    fn.name = t_n->val;
+                    fn.ret = *t;
+                    local_fn.insert(fn);
+                    
+                    ++t;
+                    continue;
+                }
+
+                //是全局变量
+                Token& t_type = *t;
+                std::deque<Token*> to_be_m;
+                t++;
+                while(t->type == CPP_NAME || t->type == CPP_COMMA) {
+                    if (t->type == CPP_NAME) {
+                        to_be_m.push_back(&(*t));
+                    }
+                    t++;
+                }
+        CHECK_GLOBAL_VARIABLE_END:
+                //LABEL这里和成员变量不一样, 全局变量可以直接声明或者定义
+                if (t->type == CPP_SEMICOLON || t->type == CPP_EQ )  {
+                    //之前的都是全局变量, 
+                    for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
+                        (*it_to_be_m)->type = CPP_GLOBAL_VARIABLE;
+                        local_variable[(*it_to_be_m)->val] = t_type;
+                    }
+                } else {
+                    if (t->type == CPP_OPEN_SQUARE) {
+                        //跳过数组(可以跳过多个)
+                        ++t;
+                        while(t->type != CPP_CLOSE_SQUARE) {
+                            ++t;
+                        }
+                        ++t;
+                        goto CHECK_GLOBAL_VARIABLE_END;
+                    }
+                    assert(false);
+                }
+            } 
+            //全局函数的提取, 寻找 fn(
+            else if ((st_brace.empty()||in_annoy) && st_paren.empty() && t->type == CPP_NAME && 
+                t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
+                //可能是函数
+                //找前一步type
+                auto t_p = t-1;
+                bool get_fn_type = false;
+                while(t_p != ts.begin()) {
+                    if (t_p->type == CPP_TYPE) {
+                        get_fn_type = true;
+                        break;
+                    } else if (t_p->type == CPP_MACRO) {
+                        //TODO 展开宏
+                        //LABEL 这里不展开宏,直接跳过
+                        --t_p;
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+                if (get_fn_type) {
+                    Function fn;
+                    fn.name = t->val;
+                    fn.ret = *t_p;
+                    local_fn.insert(fn);
+                }
+            }
+            ++t;
+        }
+    }
+}
 
 void ParserGroup::label_call()  {
     //1 先找到调用域(必须是函数域)
@@ -3017,7 +3229,7 @@ void ParserGroup::debug(const std::string& debug_out) {
         out.close();
     }
 
-    //print globale variable
+    //print global variable
     {
         const std::string f = debug_out+"/global_variable";
         std::ofstream out(f, std::ios::out);
@@ -3029,6 +3241,66 @@ void ParserGroup::debug(const std::string& debug_out) {
             out << it->first << " type: ";
             print_token(it->second, out);
             out << std::endl;
+        }
+        out.close();
+    }
+
+    //print global function
+    {
+        const std::string f = debug_out+"/global_functions";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            return;
+        }
+        for (auto it_f = _g_functions.begin(); it_f != _g_functions.end(); ++it_f) {
+            out << it_f->name << " ret: ";
+            print_token(it_f->ret, out);
+            out << std::endl;
+        }
+        out.close();
+    }
+
+    //print local variable
+    {
+        const std::string f = debug_out+"/local_variable";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            return;
+        }
+        for (auto it = _local_variable.begin(); it != _local_variable.end(); ++it) {
+            if (!it->second.empty()) {
+                out << "file: " << it->first << " local variables: ";
+                out << "\n";
+            }
+            for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
+                out << "\t" << it2->first << " type: ";
+                print_token(it2->second, out);
+                out << " \n"; 
+            }
+        }
+        out.close();
+    }
+
+    //print local function
+    {
+        const std::string f = debug_out+"/local_function";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            return;
+        }
+        for (auto it = _local_functions.begin(); it != _local_functions.end(); ++it) {
+            if (!it->second.empty()) {
+                out << "file: " << it->first << " local function: ";
+                out << "\n";
+            }
+            for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
+                out << "\t" << (*it2).name << " ret: ";
+                print_token((*it2).ret, out);
+                out << " \n"; 
+            }
         }
         out.close();
     }
