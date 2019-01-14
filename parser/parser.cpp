@@ -2640,6 +2640,8 @@ void ParserGroup::label_call()  {
                     continue;    
 
                 } else if (t->type == CPP_NAME) {
+                    //TODO 注意容器迭代器的解引用 如 vector set stack等
+                    
                     if (t_p >= t_start || (t_p->type != CPP_DOT && t_p->type != CPP_POINTER)) {
                         //找到主语源头
                         root_type = sub_type(t,t_start,class_name,file_name,paras,"");
@@ -2658,6 +2660,8 @@ void ParserGroup::label_call()  {
                     break;
                 } else if (t->type == CPP_CLOSE_SQUARE) {
                     //数组, 跳过数组
+                    //TODO 注意容器的取值（同at）如vector map
+
                     std::stack<Token> s_square;
                     s_square.push(*t);
                     --t;
@@ -2817,6 +2821,16 @@ void ParserGroup::label_call()  {
                             root_type = ret;
                             continue;
                         } else {
+                            //TODO 检查是不是stl的container调用(返回类型或者迭代器本身)
+                            //contaier's erase begin end find 返回container（迭代器和本身无异）
+                            //shared_ptr get 返回类型
+                            //vector at front back data 返回类型
+                            //list front back 返回类型
+                            //deque front back at 返回类型
+                            //queue front back 返回类型
+                            //map at 返回类型
+                            //stack top返回类型
+
                             std::cout << "may 3th module: " << root_type.val << "\n";
                             Token t;
                             t.type = CPP_OTHER;
