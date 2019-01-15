@@ -110,6 +110,7 @@ enum TokenType {
     CPP_GLOBAL_VARIABLE, //全局变量
     CPP_FUNCTION,//定义在类外的过程
     CPP_CALL,//函数调用
+    CPP_ITERATOR,//stl容器的迭代器,分析过程调用的主语类型的时候临时标记
 };
 
 struct Token {
@@ -129,6 +130,9 @@ struct Token {
     //function 类型: 如果是空则是全局的
     //               如果有值则作用域为subject(这里是class名)
     std::string subject;
+
+    //临时变量: 如分析过程调用链条的时候作为中间单词是否带有解引用的标记
+    int para;
 };
 
 struct ClassType {

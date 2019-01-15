@@ -2484,6 +2484,11 @@ void ParserGroup::label_call()  {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         const std::string file_name = _file_name[file_idx++];
+        bool is_cpp = false;
+        if (file_name.size() > 2 && file_name.substr(file_name.size()-4, 5) == ".cpp") {
+            is_cpp = true;
+        } 
+
         std::cout << "label file: " << file_name << std::endl;
         std::deque<Token>& ts = parser._ts;
 
@@ -2533,7 +2538,8 @@ void ParserGroup::label_call()  {
             return paras;
         };
 
-        std::function<Token(std::deque<Token>::iterator, const std::deque<Token>::iterator, 
+        std::function<Token(
+            std::deque<Token>::iterator, const std::deque<Token>::iterator, 
         const std::string&, const std::string&, const std::map<std::string, Token>&, std::string)> sub_type =
         [this, &ts](std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, 
         const std::string& class_name, const std::string& file_name, const std::map<std::string, Token>& paras, std::string first_second) {
@@ -2622,35 +2628,45 @@ void ParserGroup::label_call()  {
         };
 
         //回溯寻找函过程调用的主语
-        std::function<Token(std::deque<Token>::iterator&, const std::deque<Token>::iterator, 
-        const std::string&, const std::string&, const std::map<std::string, Token>&)> get_subject_type =
-        [this, &ts,sub_type](std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start, 
-        const std::string& class_name, const std::string& file_name, const std::map<std::string, Token>& paras) {
+        std::function<Token(
+            std::deque<Token>::iterator&, 
+            const std::deque<Token>::iterator, 
+            const std::string&, 
+            const std::string&, 
+            const std::map<std::string, Token>&)> get_subject_type =
+        [this, &ts,sub_type](
+            std::deque<Token>::iterator& t, 
+            const std::deque<Token>::iterator t_start, 
+            const std::string& class_name, 
+            const std::string& file_name, 
+            const std::map<std::string, Token>& paras) 
+        {
             std::stack<Token> s_list;
             Token root_type;
             while(t <= t_start) {
                 auto t_p = t-1;
-                if (t->val == "second" || t->val == "first") {
-                    //LABEL TODO 这里假设second和first一定是stl中的变量, 一种简化
-                    assert(t_p <= t_start);                    
-                    assert(t_p->type == CPP_DOT || t_p->type == CPP_POINTER);
-                    auto t_pp = t_p-1;
-                    if (t_pp < t_start || (t_pp->type != CPP_DOT && t_pp->type != CPP_POINTER)) {
-                        //找到主语源头
-                        root_type = sub_type(t_pp,t_start,class_name,file_name,paras,t->val);
-                        break;
-                    }
-
-                    //变量嵌套
-                    s_list.push(*t);
-                    s_list.top().subject = t->val;
-                    --t;
-                    --t;
-                    continue;    
-
-                } else if (t->type == CPP_NAME) {
-                    //TODO 注意容器迭代器的解引用 如 vector set stack等
+                // if (t->val == "second" || t->val == "first") {
+                //     //LABEL TODO 这里假设second和first一定是stl中的变量, 一种简化
+                //     assert(t_p <= t_start);                    
+                //     assert(t_p->type == CPP_DOT || t_p->type == CPP_POINTER);
+                //     auto t_pp = t_p-1;//t_pp是迭代器的可能性很大,不排除class中有second 和 first这种参数
                     
+                //     // if (t_pp < t_start || (t_pp->type != CPP_DOT && t_pp->type != CPP_POINTER)) {
+                //     //     //找到主语源头
+                //     //     root_type = sub_type(t_pp,t_start,class_name,file_name,paras,t->val);
+                //     //     break;
+                //     // }
+
+                //     //变量嵌套
+                //     s_list.push(*t);
+                //     s_list.top().subject = t->val;
+                //     --t;
+                //     --t;
+                //     continue;    
+
+                // } else 
+                if (t->type == CPP_NAME) {
+                    //TODO 注意需要记录解引用吗? (如何和乘号区别), 容器迭代器的解引用 如 vector set stack等
                     if (t_p >= t_start || (t_p->type != CPP_DOT && t_p->type != CPP_POINTER)) {
                         //找到主语源头
                         root_type = sub_type(t,t_start,class_name,file_name,paras,"");
@@ -2668,9 +2684,12 @@ void ParserGroup::label_call()  {
                     root_type.val = class_name;
                     break;
                 } else if (t->type == CPP_CLOSE_SQUARE) {
-                    //数组, 跳过数组
+                    //记录数组 数组, 并跳过数组
                     //TODO 注意容器的取值（同at）如vector map
+                    s_list.push(*t);
+                    s_list.top().subject = "array";
 
+                    //跳过数组
                     std::stack<Token> s_square;
                     s_square.push(*t);
                     --t;
@@ -2689,7 +2708,8 @@ void ParserGroup::label_call()  {
                     // 1 被括起来的变量
                     // 2 函数调用
                     //先跳出括号，看紧跟着括号的单词是什么 
-                    std::deque<std::deque<Token>::iterator> inner_para;
+                    auto t_p0 = t-1;//
+                    //std::deque<std::deque<Token>::iterator> inner_para;
                     std::stack<Token> s_paren;
                     s_paren.push(*t);
                     --t;
@@ -2700,7 +2720,7 @@ void ParserGroup::label_call()  {
                         } else if (t->type == CPP_CLOSE_PAREN) {
                             s_paren.push(*t);
                         } else if (t->type == CPP_NAME) {
-                            inner_para.push_back(t);
+                            //inner_para.push_back(t);
                         }
                         --t;
                     }
@@ -2739,6 +2759,11 @@ void ParserGroup::label_call()  {
                                 root_type = ret;
                                 break;
                             }
+                            
+                            //如果都不匹配,则可能是三方模块的 构造函数如 A()->fn(), 混淆的范围内
+                            std::cout << "root type may 3th module construct: " << inner_fn_name << std::endl;
+                            root_type.type = CPP_OTHER;
+                            break;
                         }
 
                         s_list.push(*t);
@@ -2750,28 +2775,22 @@ void ParserGroup::label_call()  {
                         root_type = *t;
                         break;
                     } else {
-                        //认为括号内部只有一个变量
-                        assert(inner_para.size() ==1);
-                        t_p = t-1;
-                        if (t_p < t_start || (t_p->type != CPP_DOT && t_p->type != CPP_POINTER)) {
-                            //找到主语源头
-                            root_type = sub_type(inner_para.back(),t_start,class_name,file_name,paras,"");
-                            break;
-                        }
-
-                        //变量嵌套
-                        s_list.push(*inner_para.back());
-                        s_list.top().subject = "name";
-                        --t;
+                        //括号整体返回了一个变量, 继续分析括号内部的内容
+                        t = t_p0;
                         continue;
                     }
                 }
                 --t;
             }
 
+
+            //分析函数调用链条上的主语类型
             if (s_list.empty()) {
                 return root_type;
             } else {
+                //name , 如果是first 和 second
+                bool root_iterator = false;
+
                 while(!s_list.empty()) {
                     if (root_type.type == CPP_OTHER) {
                         //中间环节已经无法识别
@@ -2839,6 +2858,7 @@ void ParserGroup::label_call()  {
                             //queue front back 返回类型
                             //map at 返回类型
                             //stack top返回类型
+                            if ()
 
                             std::cout << "may 3th module: " << root_type.val << "\n";
                             Token t;
@@ -2862,12 +2882,20 @@ void ParserGroup::label_call()  {
 
 
 
-        //回溯寻找type的关键函数
-        std::function<bool(std::deque<Token>::iterator, const std::deque<Token>::iterator, 
-        const std::string&, const std::string&, const std::map<std::string, Token>&)> recall_type = 
-        [this, &ts, get_subject_type](std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, 
-        const std::string& class_name, const std::string& file_name, const std::map<std::string, Token>& paras) {
-
+        //回溯寻找type是否在分析的代码模块中
+        std::function<bool(
+            std::deque<Token>::iterator, 
+            const std::deque<Token>::iterator, 
+            const std::string&, 
+            const std::string&, 
+            const std::map<std::string, Token>&)> recall_type = 
+        [this, &ts, get_subject_type, is_cpp](
+            std::deque<Token>::iterator t, 
+            const std::deque<Token>::iterator t_start, 
+            const std::string& class_name, 
+            const std::string& file_name, 
+            const std::map<std::string, Token>& paras) 
+        {
             const std::string fn_name = t->val;
             ///\ 1 查看是不是静态调用，如果是则返回false（之前已经将所有的类静态调用都设置成function了）
             if((t-1)->type == CPP_SCOPE) {
@@ -2877,6 +2905,8 @@ void ParserGroup::label_call()  {
             
             ///\ 2 查看是否没有主语
             if ((t-1)->type != CPP_POINTER && (t-1)->type != CPP_DOT) {
+                ///\3 没有主语则匹配 全局函数 / 函数成员函数 / 或者局部函数(需要是cpp文件)
+
                 //1.1 匹配全局函数
                 Token ret;
                 if (is_global_function(fn_name, ret)) {
@@ -2896,8 +2926,15 @@ void ParserGroup::label_call()  {
                     return true;
                 } 
 
-                //LABEL 构造语句也会到这里 如
-                //type a(new a);
+                //1.3 如果是cpp则匹配局部函数
+                if (is_cpp && is_global_function(fn_name, ret)) {
+                    std::cout << "is local fn\n";
+                    return true;
+                }
+
+                //LABEL 其他
+                //+ 构造语句也会到这里 如 type a(new a);
+                //+ 第三方调用
 
                 std::cerr << "fn dismatch, may 3th fn, or new construct\n";
                 return false;
@@ -2969,10 +3006,19 @@ void ParserGroup::label_call()  {
             return false;
         } ;
 
-        std::function<void(std::deque<Token>::iterator, const std::deque<Token>::iterator, 
-        const std::string&, const std::string&, const std::map<std::string, Token>&)> label_call = 
-        [this, &ts, recall_type](std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, 
-        const std::string& class_name, const std::string& file_name, const std::map<std::string, Token>& paras) {
+        std::function<void(
+            std::deque<Token>::iterator, 
+            const std::deque<Token>::iterator, 
+            const std::string&, 
+            const std::string&, 
+            const std::map<std::string, Token>&)> label_call_in_fn = 
+        [this, &ts, recall_type](
+            std::deque<Token>::iterator t, 
+            const std::deque<Token>::iterator t_start, 
+            const std::string& class_name, 
+            const std::string& file_name, 
+            const std::map<std::string, Token>& paras) 
+        {
             //过程调用的语法为 [主语[->/.]]function(paras)
             assert(t->type == CPP_OPEN_BRACE);
 
@@ -3035,7 +3081,7 @@ void ParserGroup::label_call()  {
                 //这个{就是回溯的终点限制
                 std::cout << "label fn " << fn_name << std::endl;
 
-                label_call(t, t, class_name, file_name, paras);
+                label_call_in_fn(t, t, class_name, file_name, paras);
                 
 
 
@@ -3057,7 +3103,7 @@ void ParserGroup::label_call()  {
                 std::cout << "label " << class_name << "::" << fn_name << std::endl;
 
                 //这个{就是回溯的终点限制
-                label_call(t, t, class_name, file_name, paras);
+                label_call_in_fn(t, t, class_name, file_name, paras);
 
             } else {
                 ++t;

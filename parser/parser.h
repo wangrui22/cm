@@ -95,6 +95,8 @@ private:
     bool is_global_variable(const std::string& v_name, Token& t_type);
     bool is_local_variable(const std::string& file_name, const std::string& v_name, Token& t_type);
 
+    bool is_stl_container(const std::string& name);
+
 private:
     std::vector<std::string> _file_name;
     std::vector<Parser*> _parsers;
