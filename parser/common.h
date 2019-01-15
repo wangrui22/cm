@@ -188,6 +188,18 @@ inline bool operator < (const Function& l,  const Function& r) {
     l.name < r.name;
 }
 
+static const char* stl_containers = {
+"vector",
+"deque",
+"queue",
+"stack",
+"list",
+"set",
+"map",
+"pair",
+"auto_ptr",
+};
+
 static const char* keywords[] = {
 "alignas",
 "alignof",

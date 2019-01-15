@@ -2538,10 +2538,45 @@ void ParserGroup::label_call()  {
             return paras;
         };
 
+        std::function<Token(std::deque<Token>::iterator, const std::deque<Token>::iterator, int)> get_auto_type = 
+        [this, &ts](std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, int case0) {
+            auto t_n = t+1;
+            assert(case0 == 1 || case0 == 2);
+            if (case0 == 1) {
+                //可能是复制构造 如 auto a =
+                assert(t_n->type == CPP_EQ);
+                //认为 ; 是赋值结束
+                while(t_n != ts.end() && t_n->type != CPP_SEMICOLON) {
+                    if (t_n->val == "new") {
+
+                    } else if (t_n->val == "make_shared") {
+
+                    } else if (t_n->type == CPP_NAME) {
+                        //可能是另一个参数的直接赋值 auto a = b;
+                        if（(t_n+1) != ts.end() && (t_n+1)->type == CPP_SEMICOLON) {
+                            return sub_type;//TODOTODO 需要把lambda表达式写成类成员函数，递归调用
+                        }
+                        //或者是另一个参数的函数返回值
+                    }
+                }
+                auto t_nn = t+2;
+                if (t_nn->val == "new") {
+
+                } else if (t_nn->val == "std" && (t_nn+1)<=t_start && (t_nn+1)->val == CPP_SCOPE
+                 && ) {
+
+                }
+
+            } else {
+                //可能是拷贝构造 如 auto a(...)    
+
+            }
+        };
+
         std::function<Token(
             std::deque<Token>::iterator, const std::deque<Token>::iterator, 
         const std::string&, const std::string&, const std::map<std::string, Token>&, std::string)> sub_type =
-        [this, &ts](std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, 
+        [this, &ts, get_auto_type](std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, 
         const std::string& class_name, const std::string& file_name, const std::map<std::string, Token>& paras, std::string first_second) {
             const std::string v_name = t->val;
             //类成员变量
@@ -2561,41 +2596,99 @@ void ParserGroup::label_call()  {
                 auto t_p = t-1;
                 auto t_n = t+1;
                 auto t_nn = t+2;
-                if ((t_p->type == CPP_TYPE || t_p->type == CPP_NAME) && t->val == v_name && t_n->type == CPP_EQ) {
-                    //复制构造 如 type a = 
-                    if (t_p->type != CPP_TYPE) {
-                        std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
-                    }
-                    if (t_p->val == "auto") {
-                        //TODO 寻找赋值语句的右部， 暂时不分析
-                        std::cout << "TODO get type auto.\n";
-                        return *t_p;
-                    } else {
-                        return *t_p;
-                    }
-                } else if ((t_p->type == CPP_TYPE || t_p->type == CPP_NAME) && t->val == v_name && t_n->type == CPP_OPEN_PAREN) {
-                    //拷贝构造 如 type a(...)
-                    if (t_p->type != CPP_TYPE) {
-                        std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
+                if (t->val == v_name && t_n->type == CPP_EQ) {
+                    //可能是复制构造 如 type a =
+                    //过滤掉 type[*&]
+                    while((t_p->type == CPP_MULT || t_p->type == CPP_AND) && t_p<=t_start) {
+                        --t_p;
                     }
 
-                    if (t_p->val == "auto") {
-                        std::cout << "TODO get type auto.\n";
+                    if (t_p->type == CPP_TYPE) {
                         return *t_p;
+                    } else if (t_p->val == "auto") {
+                        //寻找赋值语句的右部
+                        std::cout << "get type auto.\n";
+                        return get_auto_type(t_p, t_start, 1);
+                    } else if (t->val == "const_iterator" || t->val == "iterator") {
+                        //迭代器 需要往前再回溯到容器
+                        auto t_pp = t_p - 1;
+                        assert(t_pp <= t_start);
+                        assert(t_pp->type == CPP_SCOPE);
+                        auto t_ppp = t_p - 2;
+                        assert(t_ppp <= t_start);
+                        assert(t_ppp->type == CPP_TYPE);
+                        assert(is_stl_container(t_ppp->val));
+                        Token tt = *t_ppp;
+                        tt.type == CPP_ITERATOR;
+                        return tt;
                     } else {
-                        return *t_p;
+                        std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
+                        Token tt;
+                        tt.type = CPP_OTHER;
+                        return tt;
                     }
-                } else if ((t_p->type == CPP_TYPE || t_p->type == CPP_NAME) && t->val == v_name && t_n->type == CPP_SEMICOLON) {
+                } else if (t->val == v_name && t_n->type == CPP_OPEN_PAREN) {
+                    //可能是拷贝构造 如 type a(...)
+                    //过滤掉 type[*&]
+                    while((t_p->type == CPP_MULT || t_p->type == CPP_AND) && t_p<=t_start) {
+                        --t_p;
+                    }
+
+                    if (t_p->type == CPP_TYPE) {
+                        return *t_p;
+                    } else if (t_p->val == "auto") {
+                        //寻找赋值语句的右部
+                        std::cout << "get type auto.\n";
+                        return get_auto_type(t_p, t_start, 2);
+                    } else if (t->val == "const_iterator" || t->val == "iterator") {
+                        //迭代器 需要往前再回溯到容器
+                        auto t_pp = t_p - 1;
+                        assert(t_pp <= t_start);
+                        assert(t_pp->type == CPP_SCOPE);
+                        auto t_ppp = t_p - 2;
+                        assert(t_ppp <= t_start);
+                        assert(t_ppp->type == CPP_TYPE);
+                        assert(is_stl_container(t_ppp->val));
+                        Token tt = *t_ppp;
+                        tt.type == CPP_ITERATOR;
+                        return tt;
+                    } else {
+                        std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
+                        Token tt;
+                        tt.type = CPP_OTHER;
+                        return tt;
+                    }
+                } else if (t->val == v_name && t_n->type == CPP_SEMICOLON) {
                     //没有默认参数的构造（warning） 如 type a;
-                    if (t_p->type != CPP_TYPE) {
-                        std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
+                    while((t_p->type == CPP_MULT || t_p->type == CPP_AND) && t_p<=t_start) {
+                        --t_p;
                     }
 
-                    if (t_p->val == "auto") {
-                        std::cout << "TODO get type auto.\n";
+                    if (t_p->type == CPP_TYPE) {
                         return *t_p;
+                    } else if (t_p->val == "auto") {
+                        //寻找赋值语句的右部
+                        std::cerr << "dont support auto it;\n";
+                        Token tt;
+                        tt.type = CPP_OTHER;
+                        return tt;
+                    } else if (t->val == "const_iterator" || t->val == "iterator") {
+                        //迭代器 需要往前再回溯到容器
+                        auto t_pp = t_p - 1;
+                        assert(t_pp <= t_start);
+                        assert(t_pp->type == CPP_SCOPE);
+                        auto t_ppp = t_p - 2;
+                        assert(t_ppp <= t_start);
+                        assert(t_ppp->type == CPP_TYPE);
+                        assert(is_stl_container(t_ppp->val));
+                        Token tt = *t_ppp;
+                        tt.type == CPP_ITERATOR;
+                        return tt;
                     } else {
-                        return *t_p;
+                        std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
+                        Token tt;
+                        tt.type = CPP_OTHER;
+                        return tt;
                     }
                 } else if (t->val == "catch" && (t+1)->type == CPP_OPEN_PAREN) {
                     //catch语句的特殊处理, 在catch的括号内部寻找可能的赋值语句
@@ -3540,6 +3633,16 @@ bool ParserGroup::is_global_function(const std::string& fn_name, Token& ret) {
     if (it_fn != _g_functions.end()) {
         ret = it_fn->ret;
         return true;
+    }
+
+    return false;
+}
+
+bool ParserGroup::is_stl_container(const std::string& name) {
+    for (int i=0; i<sizeof(stl_containers)/sizeof(char*); ++i) {
+        if (name == stl_containers[i]) {
+            return true;
+        }
     }
 
     return false;
