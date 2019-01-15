@@ -1915,6 +1915,7 @@ void ParserGroup::extract_extern_type() {
                     if (it_sub_scope != last_scope->sub_scope.end() && it_type != last_scope->types.end() && t_nnn != ts.end() && t_nnn->type == CPP_SCOPE) {
                         ts_to_be_type.push_back(*t_n);//::
                         ts_to_be_type.push_back(*t_nn);//type
+                        ts_to_be_type.back().subject = last_scope->scope;
                         t+=2;
 
                         last_scope = &(*it_sub_scope);
@@ -1924,10 +1925,12 @@ void ParserGroup::extract_extern_type() {
                         to_be_type = CPP_TYPE;
                         ts_to_be_type.push_back(*t_n);//::
                         ts_to_be_type.push_back(*t_nn);//type
+                        ts_to_be_type.back().subject = last_scope->scope;
                         t+=3;
                     } else if (it_sub_scope != last_scope->sub_scope.end()) {
                         ts_to_be_type.push_back(*t_n);//::
                         ts_to_be_type.push_back(*t_nn);//type
+                        ts_to_be_type.back().subject = last_scope->scope;
                         t+=2;
 
                         last_scope = &(*it_sub_scope);
@@ -1941,8 +1944,14 @@ void ParserGroup::extract_extern_type() {
                 } else if (!ts_to_be_type.empty() && to_be_type == CPP_TYPE) {
                     t -= (ts_to_be_type.size()+1);
                     assert(t->val == scope_root);
-                    t->ts = ts_to_be_type;
+                    t->ts.clear();
+                    for (auto it_types = ts_to_be_type.begin(); it_types != ts_to_be_type.end(); ++it_types) {
+                        if (it_types->type != CPP_SCOPE) {
+                            t->ts.push_back(*it_types);
+                        }
+                    }
                     t->type = CPP_TYPE;
+                    t->subject = scope_type.scope;
                     ++t;
                     while(!ts_to_be_type.empty()) {
                         ts_to_be_type.pop_back();
