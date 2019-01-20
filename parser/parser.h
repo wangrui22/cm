@@ -62,7 +62,7 @@ public:
     Parser* get_parser(const std::string& file_name);
 
     //按顺序调用
-    void extract_marco();
+    void parse_marco();
     void extract_enum();
     void extract_extern_type();
     void extract_class();
@@ -80,6 +80,7 @@ public:
 
 private:
     bool is_in_marco(const std::string& m);
+    bool is_in_marco(const std::string& m, Token& val);
     bool is_in_class_struct(const std::string& name, bool& tm);
     bool is_in_typedef(const std::string& name);
     bool is_in_typedef(const std::string& name, Token& t_type);
@@ -97,6 +98,8 @@ private:
 
     bool is_stl_container(const std::string& name);
 
+    void extrac_class(std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, Scope cur_scope, std::deque<Token>& ts);
+    void extrac_template_class(std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, Scope cur_scope);
 private:
     std::vector<std::string> _file_name;
     std::vector<Parser*> _parsers;

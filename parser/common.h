@@ -4,6 +4,8 @@
 #include <string>
 #include <ostream>
 #include <vector>
+#include <stack>
+#include <deque>
 
 enum TokenType {
     CPP_EQ = 0, // =
@@ -103,8 +105,8 @@ enum TokenType {
     CPP_ENUM,//枚举
     CPP_CLASS_BEGIN,// class 开始的 {
     CPP_CLASS_END,// class 结束的 {
-    CPP_STRUCT_BEGIN,//struct 开始的 {
-    CPP_STRUCT_END,//struct 结束的 }
+    //CPP_STRUCT_BEGIN,//struct 开始的 {
+    //CPP_STRUCT_END,//struct 结束的 }
     CPP_MEMBER_FUNCTION, //成员函数
     CPP_MEMBER_VARIABLE, //成员变量
     CPP_GLOBAL_VARIABLE, //全局变量
@@ -132,14 +134,24 @@ struct Token {
     std::string subject;
 
     //临时变量: 如分析过程调用链条的时候作为中间单词是否带有解引用的标记
-    int para;
+    //int para;
+};
+
+//作用域, 为空是全局作用域
+struct Scope {
+    std::string name;
+    std::string key;
+    int type;//0 namespace 1 class/stuct 3 function
+    std::stack<Token> sb;// store brace to check scope
+    std::deque<Scope> father;
 };
 
 struct ClassType {
     std::string name;
     bool is_struct;
     bool is_template;
-    std::string father;
+    std::string father;//不考虑多重继承
+    Scope scope;
 };
 
 struct ClassFunction {
@@ -159,9 +171,15 @@ struct ClassVariable {
 struct Function {
     std::string name;
     Token ret;
+    Scope scope;
 };
 
-//由namespace 或者 struct/class中定义
+struct Typedef {
+    Token val;
+    Scope scope;
+};
+
+//由namespace 或者 struct/class中定义， 用作容器分析
 struct ScopeType {
     std::string scope;
     std::set<std::string> types;
@@ -188,7 +206,7 @@ inline bool operator < (const Function& l,  const Function& r) {
     l.name < r.name;
 }
 
-static const char* stl_containers = {
+static const char* stl_containers[] = {
 "vector",
 "deque",
 "queue",
@@ -539,12 +557,6 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             break;
         case CPP_CLASS_END:
             out << "class end";
-            break;
-        case CPP_STRUCT_BEGIN:
-            out << "struct begin";
-            break;
-        case CPP_STRUCT_END:
-            out << "struct end";
             break;
         case CPP_GLOBAL_VARIABLE:
             out << "global variable: ";
