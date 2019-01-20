@@ -92,9 +92,9 @@ int main(int argc, char* argv[]) {
     parser_group.extract_extern_type();
     parser_group.extract_class();
     parser_group.extract_typedef();
-    // parser_group.extract_container();
-    // parser_group.combine_type2();
-    // parser_group.extract_class2();
+    parser_group.extract_container();
+    parser_group.combine_type_with_multi_and();
+    parser_group.extract_class2();
     // parser_group.extract_global_var_fn();
     // parser_group.extract_local_var_fn();
     // parser_group.extract_typedef2();

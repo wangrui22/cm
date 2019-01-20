@@ -68,11 +68,10 @@ public:
     void extract_class();
     void extract_typedef();
     void extract_container();
-    void combine_type2();
+    void combine_type_with_multi_and();
     void extract_class2();
     void extract_global_var_fn();
     void extract_local_var_fn();
-    void extract_typedef2();//重新构造typedef 的类型
 
     void label_call();
 
@@ -99,7 +98,8 @@ private:
     bool is_stl_container(const std::string& name);
 
     void extrac_class(std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, Scope cur_scope, std::deque<Token>& ts);
-    void extrac_template_class(std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, Scope cur_scope);
+    void extrac_template_class(std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, Scope cur_scope, std::deque<Token>& ts);
+    void extract_class_variable(std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, std::deque<Token>& ts);
 private:
     std::vector<std::string> _file_name;
     std::vector<Parser*> _parsers;
@@ -120,7 +120,10 @@ private:
     std::set<Function> _g_functions;//全局函数
     std::map<std::string, std::set<Function>> _local_functions;//cpp的局部函数
 
-    std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来
+    //typedef
+    std::map<std::string, Token> _typedef_map;//key scope::name
+
+    //std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来
 };
 
 #endif

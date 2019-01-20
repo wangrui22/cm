@@ -174,11 +174,6 @@ struct Function {
     Scope scope;
 };
 
-struct Typedef {
-    Token val;
-    Scope scope;
-};
-
 //由namespace 或者 struct/class中定义， 用作容器分析
 struct ScopeType {
     std::string scope;
