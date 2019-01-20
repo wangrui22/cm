@@ -99,7 +99,7 @@ private:
 
     void extrac_class(std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, Scope cur_scope, std::deque<Token>& ts);
     void extrac_template_class(std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, Scope cur_scope, std::deque<Token>& ts);
-    void extract_class_variable(std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, std::deque<Token>& ts);
+    void extract_class_member(std::string c_name, std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, std::deque<Token>& ts);
 private:
     std::vector<std::string> _file_name;
     std::vector<Parser*> _parsers;

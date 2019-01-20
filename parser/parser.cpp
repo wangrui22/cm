@@ -1398,7 +1398,7 @@ void ParserGroup::extrac_class(
                 auto t_may_c = t;
                 ++t;
                 jump_paren();
-                if (t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
+                if (t->type == CPP_OPEN_PAREN || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
                     t_may_c->type = CPP_MEMBER_FUNCTION;
                     t_may_c->subject = cur_c_name;
                     class_fn.push_back({access, cur_c_name, t_may_c->val, recall_fn_ret(t_may_c), Token()});
@@ -1731,7 +1731,7 @@ void ParserGroup::extrac_template_class(
                 auto t_may_c = t;
                 ++t;
                 jump_paren();
-                if (t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
+                if (t->type == CPP_OPEN_PAREN || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
                     t_may_c->type = CPP_MEMBER_FUNCTION;
                     t_may_c->subject = cur_c_name;
                     class_fn.push_back({access, cur_c_name, t_may_c->val, recall_fn_ret(t_may_c), Token()});
@@ -2654,14 +2654,102 @@ void ParserGroup::combine_type_with_multi_and() {
         }
     }
 }
-void ParserGroup::extract_class_variable(
+void ParserGroup::extract_class_member(
+    std::string cur_c_name,
     std::deque<Token>::iterator& t, 
-    std::deque<Token>::iterator it_begin, 
-    std::deque<Token>::iterator it_end, 
+    std::deque<Token>::iterator t_begin, 
+    std::deque<Token>::iterator t_end, 
     std::deque<Token>& ts) {
 
-}
+    auto it_class = _g_class.find({cur_c_name, false, false, "", Scope()});
+    assert(it_class != _g_class.end());
 
+    _g_class_variable[*it_class] = std::vector<ClassVariable>();
+    std::vector<ClassVariable>& class_variable = _g_class_variable.find(*it_class)->second;
+
+    std::string sub_class_name;
+    ++t;
+    while (t <= t_end) {
+        auto t_n = t+1;
+        if (t->type == CPP_CLASS || t->type == CPP_STURCT) {
+            sub_class_name = t->val;
+            ++t;
+            continue;
+        }
+        else if (t->type == CPP_CLASS_BEGIN) {
+            //class嵌套
+            auto t_begin0 = t;
+            jump_brace(t, ts);
+            extract_class_member(sub_class_name, t_begin0, t_begin0, t, ts);
+            continue;
+        } else if (t->type == CPP_TYPE && t_n->type == CPP_NAME &&
+            ((t-1)->type == CPP_OPEN_BRACE || 
+             (t-1)->type == CPP_CLOSE_BRACE ||
+             (t-1)->type == CPP_COMMENT ||
+             (t-1)->type == CPP_COLON ||
+             (t-1)->type == CPP_SEMICOLON||
+             (t-1)->val == "mutable" ||
+             (t-1)->val == "static")) {
+             
+             //有可能是成员变量
+             Token& t_type = *t;
+             std::deque<Token*> to_be_m;
+             t++;
+             while(t->type == CPP_NAME || t->type == CPP_COMMA) {
+                if (t->type == CPP_NAME) {
+                    to_be_m.push_back(&(*t));
+                }
+                t++;
+            }
+        CHECK_MEMBER_VARIABLE_END:
+            if (t->type == CPP_SEMICOLON) {
+                //之前的都是成员变量
+                for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
+                    (*it_to_be_m)->type = CPP_MEMBER_VARIABLE;
+                    (*it_to_be_m)->ts.push_back(t_type);
+                    class_variable.push_back({cur_c_name, (*it_to_be_m)->val, t_type});
+                }
+            } else {
+                if (t->type == CPP_OPEN_SQUARE) {
+                    //跳过数组(可以跳过多个)
+                    ++t;
+                    while(t->type != CPP_CLOSE_SQUARE) {
+                        ++t;
+                    }
+                    ++t;
+                    goto CHECK_MEMBER_VARIABLE_END;
+                }
+                            
+                assert(false);
+            }
+        } else if (t->type == CPP_MEMBER_FUNCTION) {
+            //成员函数
+            if ((t-1)->type == CPP_TYPE) {
+                auto it_fc = _g_class_fn.find({cur_c_name, false,false,"", Scope()});
+                assert (it_fc != _g_class_fn.end());
+                bool is_virtual = (t-2)->val == "virtual" || (t-3)->val == "virtual";
+                for (auto it_fn = it_fc->second.begin(); it_fn != it_fc->second.end(); ++it_fn) {
+                    if (it_fn->fn_name == t->val) {
+                        it_fn->ret = *(t-1);
+                        it_fn->is_virtual = is_virtual;
+                        //这里不直接返回,是为了将重载的其他函数的ret也设置了
+                        // ++t;
+                        // continue;
+                    }
+                }
+            } else {
+                //构造函数 或者析构函数
+                ++t;
+            }
+            ++t;
+        } else {
+            ++t;
+        }
+
+    }
+
+    ++t;
+}
 
 void ParserGroup::extract_class2() {
     //1 抽取成员变量, 细化成员函数的返回值
@@ -2671,104 +2759,17 @@ void ParserGroup::extract_class2() {
         std::string cur_c_name;
 
         for (auto t = ts.begin(); t != ts.end(); ) {
-            if (t->type == CPP_CLASS) {
-                cur_c_name = t->val;
-                ++t;
-                continue;
-            } else if (t->type == CPP_STURCT) {
+            if (t->type == CPP_CLASS || t->type == CPP_STURCT) {
                 cur_c_name = t->val;
                 ++t;
                 continue;
             } else if (t->type == CPP_CLASS_BEGIN) {
-                ++t;
-                std::stack<Token> ts_brace;
-                auto it_class = _g_class.find({cur_c_name, false, false, "", Scope()});
-                assert(it_class != _g_class.end());
-
-                _g_class_variable[*it_class] = std::vector<ClassVariable>();
-                std::vector<ClassVariable>& class_variable = _g_class_variable.find(*it_class)->second;
-
-                while(t != ts.end() && t->type != CPP_CLASS_END) {
-                    //仅仅在class的第一层作用域提取
-                    if (t->type == CPP_OPEN_BRACE) {
-                        ts_brace.push(*t);
-                        ++t;
-                        continue;
-                    } else if (t->type == CPP_CLOSE_BRACE) {
-                        assert(ts_brace.top().type == CPP_OPEN_BRACE);
-                        ts_brace.pop();
-                    }
-
-                    if (!ts_brace.empty()) {
-                        ++t;
-                        continue;
-                    }
-
-                    auto t_n = t+1;
-                    if (t->type == CPP_TYPE && t_n->type == CPP_NAME &&
-                       ((t-1)->type == CPP_OPEN_BRACE || 
-                        (t-1)->type == CPP_CLOSE_BRACE ||
-                        (t-1)->type == CPP_COMMENT ||
-                        (t-1)->type == CPP_COLON ||
-                        (t-1)->type == CPP_SEMICOLON||
-                        (t-1)->val == "mutable")) {
-                        //有可能是成员变量
-                        Token& t_type = *t;
-                        std::deque<Token*> to_be_m;
-                        t++;
-                        while(t->type == CPP_NAME || t->type == CPP_COMMA) {
-                            if (t->type == CPP_NAME) {
-                                to_be_m.push_back(&(*t));
-                            }
-                            t++;
-                        }
-                CHECK_MEMBER_VARIABLE_END:
-                        if (t->type == CPP_SEMICOLON) {
-                            //之前的都是成员变量
-                            for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
-                                (*it_to_be_m)->type = CPP_MEMBER_VARIABLE;
-                                (*it_to_be_m)->ts.push_back(t_type);
-                                class_variable.push_back({cur_c_name, (*it_to_be_m)->val, t_type});
-                            }
-                        } else {
-                            if (t->type == CPP_OPEN_SQUARE) {
-                                //跳过数组(可以跳过多个)
-                                ++t;
-                                while(t->type != CPP_CLOSE_SQUARE) {
-                                    ++t;
-                                }
-                                ++t;
-                                goto CHECK_MEMBER_VARIABLE_END;
-                            }
-                            
-                            assert(false);
-                        }
-                    }
-                    if (t->type == CPP_MEMBER_FUNCTION) {
-                        //成员函数
-                        if ((t-1)->type == CPP_TYPE) {
-                            auto it_fc = _g_class_fn.find({cur_c_name, false,false,""});
-                            assert (it_fc != _g_class_fn.end());
-                            for (auto it_fn = it_fc->second.begin(); it_fn != it_fc->second.end(); ++it_fn) {
-                                if (it_fn->fn_name == t->val) {
-                                    it_fn->ret = *(t-1);
-                                    //这里不直接返回,是为了将重载的其他函数的ret也设置了
-                                    // ++t;
-                                    // continue;
-                                }
-                            }
-                        } else {
-                            //构造函数 或者析构函数
-                        }
-                    }
-                    ++t;
-                }
-
-                cur_c_name = "";
-                
+                auto t_begin = t;
+                jump_brace(t, ts);
+                extract_class_member(cur_c_name, t_begin, t_begin, t, ts);
             } else {
                 ++t;
-            } 
+            }
         }
     }
 

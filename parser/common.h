@@ -160,6 +160,7 @@ struct ClassFunction {
     std::string fn_name;//function name
     std::deque<Token> rets;//origin return tokens
     Token ret;//return token
+    bool is_virtual;
 };
 
 struct ClassVariable {
