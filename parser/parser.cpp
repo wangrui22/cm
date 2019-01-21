@@ -934,7 +934,7 @@ void ParserGroup::parse_marco() {
     //抽取带namespace的宏
     for (auto it = _g_marco.begin(); it != _g_marco.end(); ++it) {
         Token& t = *it;
-        if (t.ts[1].val == "namespace") {
+        if (t.ts.size() > 1 && t.ts[1].val == "namespace") {
             for (auto it2 = t.ts.begin()+1;it2 != t.ts.end(); ) {
                 Token tt;
                 if (it2->type == CPP_NAME && is_in_marco(it2->val,tt)) {
@@ -955,16 +955,13 @@ void ParserGroup::parse_marco() {
     int idx = 0;
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         std::string file_name = _file_name[idx++];
-        if (file_name == "mi_logger_util.cpp") {
-            std::cout << "got it\n";
-        }
         Parser& parser = *(*it);
         std::deque<Token>& ts = parser._ts;
         for (auto t = ts.begin(); t != ts.end();) {
             Token tt;
             if (t->type == CPP_NAME && is_in_marco(t->val,tt)) {
                 t->type = CPP_MACRO;
-                if (!tt.ts.empty() && (tt.ts[1].val == "namespace" || tt.ts[1].type == CPP_CLOSE_BRACE)) {
+                if (tt.ts.size() > 1 && (tt.ts[1].val == "namespace" || tt.ts[1].type == CPP_CLOSE_BRACE)) {
                     //需要展开的宏
                     t = ts.erase(t);
                     for (auto it3 = tt.ts.begin()+1; it3 != tt.ts.end(); ++it3) {
@@ -1080,7 +1077,31 @@ static inline void jump_angle_brace(std::deque<Token>::iterator& t, std::deque<T
     }
 }
 
-void ParserGroup::extrac_class(
+static inline void jump_paren(std::deque<Token>::iterator& t, std::deque<Token>& ts) {
+    std::stack<Token> s_de;
+    while (t->type != CPP_OPEN_PAREN && t != ts.end()) {
+        ++t;
+    }
+    if (t == ts.end()) {
+        return;
+    }
+    s_de.push(*t);
+    // )
+    ++t;
+    while (!s_de.empty()) {
+        if (t->type == CPP_CLOSE_PAREN && s_de.top().type == CPP_OPEN_PAREN) {
+            s_de.pop();
+            ++t;
+        } else if (t->type == CPP_OPEN_PAREN) {
+            s_de.push(*t);
+            ++t;
+        } else {
+            ++t;
+        }
+    }
+};
+
+void ParserGroup::extract_class(
     std::deque<Token>::iterator& t,
     std::deque<Token>::iterator t_begin, 
     std::deque<Token>::iterator t_end, Scope scope,
@@ -1090,30 +1111,6 @@ void ParserGroup::extrac_class(
 
     //---------------------------------------------//
     //common function
-    std::function<void()> jump_paren = [&t, t_end]() {
-        std::stack<Token> s_de;
-        while (t->type != CPP_OPEN_PAREN && t <= t_end) {
-            ++t;
-        }
-        if (t <= t_end) {
-            return;
-        }
-        s_de.push(*t);
-        // )
-        ++t;
-        while (!s_de.empty()) {
-            if (t->type == CPP_CLOSE_PAREN && s_de.top().type == CPP_OPEN_PAREN) {
-                s_de.pop();
-                ++t;
-            } else if (t->type == CPP_OPEN_PAREN) {
-                s_de.push(*t);
-                ++t;
-            } else {
-                ++t;
-            }
-        }
-    };
-
     std::function<std::deque<Token>(std::deque<Token>::iterator)> recall_fn_ret = [](std::deque<Token>::iterator it_cf) {
         //找上一个 ; } comments 
         //LABEL 如果是模板函数会带tempalte<[*]>
@@ -1160,10 +1157,18 @@ void ParserGroup::extrac_class(
         sub.name = cur_c_name;
         sub.father.push_back(scope);
         for (auto itc = sub.father.begin(); itc != sub.father.end(); ++itc) {
-           sub.key += itc->name + "::"; 
+           if (!itc->name.empty()) {
+                sub.key += itc->name + "::"; 
+            }
         }
+    
         sub.key += sub.name;
         scope = sub;
+        cur_c_name = t->val;
+    }
+
+    if (t->val == "InnerSocket") {
+        std::cout <<"goit";
     }
 
     t->type = CPP_CLASS;
@@ -1213,10 +1218,10 @@ void ParserGroup::extrac_class(
     //分析成员变量和成员
     bool next_class_template = false;
     std::cout << "begin extract class function: " << cur_c_name << std::endl;
+    int access = default_access;
     while(t <= t_end) {
         //提取类成员函数
         //默认是class 是 private, struct 是 public
-        int access = default_access;
         if (t->val == "public") {
             access = 0;
             ++t;
@@ -1260,9 +1265,9 @@ void ParserGroup::extrac_class(
             next_class_template = (t->val == "class" || t->val == "struct");
             ++t;
             continue;
-        } else if(t->val == "calss" || t->val == "struct") {
+        } else if(t->val == "class" || t->val == "struct") {
             //可能是类中类,需要迭代
-            std::cout << "got class in class\n";
+             std::cout << "may got class in class: " << (t+1)->val << std::endl;
 
             auto t_begin2 = t;
             while (t->type != CPP_NAME) {
@@ -1283,6 +1288,14 @@ void ParserGroup::extrac_class(
                 continue;
             } else if (t->type == CPP_OPEN_BRACE) {
                 //类定义
+                if (next_class_template) {
+                    //TODO LABEL 不分析 tempalte类
+                    //跳过整个class体
+                    jump_brace(t,ts);
+                    ++t;
+                    continue;
+                }
+
                 t->type = CPP_CLASS_BEGIN;
                 jump_brace(t, ts);
                 assert(t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END);
@@ -1300,9 +1313,9 @@ void ParserGroup::extrac_class(
                 sub.key += sub.name;
 
                 if (next_class_template) {
-                    extrac_class(t_begin2, t_begin2, t, sub, ts);
+                    assert(false);
                 } else {
-                    extrac_class(t_begin2, t_begin2, t, sub, ts);
+                    extract_class(t_begin2, t_begin2, t, sub, ts);
                 }
                 ++t;
                 continue;
@@ -1331,7 +1344,7 @@ void ParserGroup::extrac_class(
 
                 //跳过函数的括号组
                 ++t;
-                jump_paren();
+                jump_paren(t, ts);
 
                 continue;
             } else if (t->val == cur_c_name && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
@@ -1343,9 +1356,9 @@ void ParserGroup::extrac_class(
                     class_fn.push_back({access, cur_c_name, t->val, std::deque<Token>(), Token()});
 
                     ++t;
-                    jump_paren();
+                    jump_paren(t, ts);
                     if (t->type == CPP_COLON) {
-                        //初始化列表 跳过直至第一个 {
+                        //初始化列表 跳过直至第一   个 {
                         ++t;
                         while(t->type != CPP_OPEN_BRACE && t!=ts.end()) {
                             ++t;
@@ -1363,13 +1376,9 @@ void ParserGroup::extrac_class(
                 } else {
                     auto t_may_c = t;
                     ++t;
-                    jump_paren();
+                    jump_paren(t, ts);
                     if (t->type == CPP_COLON) {
                         //初始化列表 是构造函数 跳过直至第一个 {
-                        // if (cur_c_name == "FPS") {
-                        //     std::cout << "got it\n";
-                        // }
-
                         t_may_c->type = CPP_MEMBER_FUNCTION;
                         t_may_c->subject = cur_c_name;
                         class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
@@ -1377,11 +1386,13 @@ void ParserGroup::extrac_class(
                         while(t->type != CPP_OPEN_BRACE && t!=ts.end()) {
                             ++t;
                         }
+                        jump_brace(t, ts);
                     } else if (t->type == CPP_OPEN_BRACE) {
                         //构造函数体  是构造函数
                         t_may_c->type = CPP_MEMBER_FUNCTION;
                         t_may_c->subject = cur_c_name;
                         class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
+                        jump_brace(t, ts);
                     } else if (t->type == CPP_SEMICOLON) {
                         //构造函数定义  是构造函数
                         t_may_c->type = CPP_MEMBER_FUNCTION;
@@ -1397,341 +1408,8 @@ void ParserGroup::extrac_class(
                 //std::cout << "may function: " << t->val << std::endl;
                 auto t_may_c = t;
                 ++t;
-                jump_paren();
-                if (t->type == CPP_OPEN_PAREN || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
-                    t_may_c->type = CPP_MEMBER_FUNCTION;
-                    t_may_c->subject = cur_c_name;
-                    class_fn.push_back({access, cur_c_name, t_may_c->val, recall_fn_ret(t_may_c), Token()});
-                } else {
-                    //不是成员函数
-                    continue;
-                }
-            } else {
-                ++t;
-            }
-        }
-    }
-}
-
-void ParserGroup::extrac_template_class(
-    std::deque<Token>::iterator& t,
-    std::deque<Token>::iterator t_begin, 
-    std::deque<Token>::iterator t_end, Scope scope,
-    std::deque<Token>& ts) {
-    //it begin calss
-    //it end }
-
-    //---------------------------------------------//
-    //common function
-    std::function<void()> jump_paren = [&t, t_end]() {
-        std::stack<Token> s_de;
-        while (t->type != CPP_OPEN_PAREN && t <= t_end) {
-            ++t;
-        }
-        if (t <= t_end) {
-            return;
-        }
-        s_de.push(*t);
-        // )
-        ++t;
-        while (!s_de.empty()) {
-            if (t->type == CPP_CLOSE_PAREN && s_de.top().type == CPP_OPEN_PAREN) {
-                s_de.pop();
-                ++t;
-            } else if (t->type == CPP_OPEN_PAREN) {
-                s_de.push(*t);
-                ++t;
-            } else {
-                ++t;
-            }
-        }
-    };
-
-    std::function<std::deque<Token>(std::deque<Token>::iterator)> recall_fn_ret = [](std::deque<Token>::iterator it_cf) {
-        //找上一个 ; } comments 
-        //LABEL 如果是模板函数会带tempalte<[*]>
-        std::stack<Token> srets;
-        auto t = it_cf-1;
-        while(!(t->type == CPP_SEMICOLON || t->type == CPP_COMMENT || t->type == CPP_CLOSE_BRACE || t->type == CPP_COLON)) {
-            srets.push(*(t--));
-        }
-        std::deque<Token> rets;
-        while(!srets.empty()) {
-            // if (srets.top()->val == "template") {
-            //     //TODO pop all template paras
-            // }
-            rets.push_back(srets.top());
-            srets.pop();
-        }
-        return rets;
-    };
-    //---------------------------------------------//
-
-
-
-    //确定class 名称
-    assert(t->val == "class" || t->val == "struct");
-    const bool is_struct = t->val == "class" ? false : true;
-    const TokenType cur_type = t->val == "class" ? CPP_CLASS : CPP_STURCT;
-    const int default_access = t->val == "class" ? 2 : 0;
-            
-    ++t;
-    //略过宏定义
-    while (t->type != CPP_NAME) {
-        t++;
-    }
-    std::string cur_c_name = t->val;
-    auto it_n = t+1;
-    if (it_n ->type == CPP_SCOPE) {
-        //类中类
-        assert((t+2)->type == CPP_NAME);
-        t+=2;
-        //增加scope
-        Scope sub;
-        sub.type = 1;
-        sub.father = scope.father;
-        sub.name = cur_c_name;
-        sub.father.push_back(scope);
-        for (auto itc = sub.father.begin(); itc != sub.father.end(); ++itc) {
-           sub.key += itc->name + "::"; 
-        }
-        sub.key += sub.name;
-        scope = sub;
-    }
-
-    t->type = CPP_CLASS;
-    
-    //分析继承 
-    std::string father;
-    ++t;
-    while(t->type != CPP_CLASS_BEGIN && t->type != CPP_COLON) {
-        ++t;
-    }
-    if (t->type == CPP_COLON) {
-        //存在继承关系
-        t++;
-        t++;
-        while(t->type != CPP_CLASS_BEGIN) {
-            if (t->val == "std" && (t+1)->type == CPP_SCOPE ) {
-                //跳过std::shared_enable的继承
-                if ((t+2)->val == "enable_shared_from_this") {
-                    assert((t+3)->type == CPP_LESS);
-                    t+=3;
-                    jump_angle_brace(t, ts);
-                    t++;
-                    continue;
-                } else {
-                    father = (t+2)->val;
-                }
-                t+=3;
-                continue;
-            } else if (t->type == CPP_NAME) {
-                father = t->val;
-                ++t;
-                continue;
-            }
-            ++t;
-        }
-    }
-
-    if (_g_class.find({cur_c_name, is_struct, true, "", Scope()}) == _g_class.end()) {
-        _g_class.insert({cur_c_name, is_struct, true, father, scope});
-    }
-    if (_g_class_fn.find({cur_c_name, is_struct, true, "", Scope()}) == _g_class_fn.end()) {
-        _g_class_fn[{cur_c_name, is_struct, true, "", scope}] = std::vector<ClassFunction>();
-    }
-    std::vector<ClassFunction>& class_fn = _g_class_fn.find({cur_c_name, is_struct, true, "", Scope()})->second;
-
-    ++t;
-    //分析成员变量和成员
-    bool next_class_template = false;
-    std::cout << "begin extract class function: " << cur_c_name << std::endl;
-    while(t <= t_end) {
-        //提取类成员函数
-        //默认是class 是 private, struct 是 public
-        int access = default_access;
-        if (t->val == "public") {
-            access = 0;
-            ++t;
-            continue;
-        } else if (t->val == "protected") {
-            access = 1;
-            ++t;
-            continue;
-        } else if (t->val == "private") {
-            access = 2;
-            ++t;
-            continue;
-        } else if (t->val == "template") {
-            //找到了模板, 忽略其中所有的class
-            //找<
-            std::stack<Token> st;
-            ++t;
-            while(t->type != CPP_LESS && t != ts.end()) {
-                ++t;
-            }
-            if (t == ts.end()) {
-                continue;
-            }
-            st.push(*t);
-            ++t;
-            //找<>组合
-            while(!st.empty() && t!= ts.end()) {
-                if (t->type == CPP_LESS) {
-                    st.push(*t);
-                }
-                else if (t->type == CPP_GREATER && st.top().type == CPP_LESS) {
-                    st.pop();
-                }
-                ++t;
-            }
-
-            if (t == ts.end()) {
-                continue;
-            }
-
-            next_class_template = (t->val == "class" || t->val == "struct");
-            ++t;
-            continue;
-        } else if(t->val == "calss" || t->val == "struct") {
-            //可能是类中类,需要迭代
-            std::cout << "got class in class\n";
-
-            auto t_begin2 = t;
-            while (t->type != CPP_NAME) {
-                t++;
-            }
-
-        CHECK_CLASS:
-            while (t->type != CPP_SCOPE && t->type != CPP_SEMICOLON && t->type != CPP_OPEN_BRACE 
-                && t->type != CPP_EQ && t->type != CPP_MULT &&  t->type != CPP_AND) {
-                t++;
-            }
-            if (t->type == CPP_EQ || t->type == CPP_MULT || t->type == CPP_AND) {
-                t++;
-                continue;
-            }
-
-            if (t->type == CPP_SEMICOLON) {
-                continue;
-            } else if (t->type == CPP_OPEN_BRACE) {
-                //类定义
-                t->type = CPP_CLASS_BEGIN;
-                jump_brace(t, ts);
-                assert(t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END);
-                t->type = CPP_CLASS_END;
-
-                //增加scope
-                Scope sub;
-                sub.type = 1;
-                sub.father = scope.father;
-                sub.name = cur_c_name;
-                sub.father.push_back(scope);
-                for (auto itc = sub.father.begin(); itc != sub.father.end(); ++itc) {
-                   sub.key += itc->name + "::"; 
-                }
-                sub.key += sub.name;
-
-                if (next_class_template) {
-                    extrac_template_class(t_begin2, t_begin2, t, sub, ts);
-                } else {
-                    extrac_class(t_begin2, t_begin2, t, sub, ts);
-                }
-                ++t;
-                continue;
-            } else if (t->type == CPP_SCOPE) {
-                //可能类中类暂时略过
-                t+1;
-                goto CHECK_CLASS; 
-            }
-        } else {
-            //!!这里仅仅分析class的定义的第一层作用域的内容
-            /// \ 分析构造函数 
-
-            //找括号组
-            //需要避开构造函数的初始化列表
-            auto t_n = t+1;
-            if (t->val == cur_c_name && (t-1)->type == CPP_COMPL) {
-                //析构函数
-                t->type = CPP_MEMBER_FUNCTION;
-                t->val = "~"+t->val;
-                t->subject = cur_c_name;
-                class_fn.push_back({access, cur_c_name, t->val, std::deque<Token>(), Token()});
-
-                //删除 ~
-                --t;
-                t = ts.erase(t);
-
-                //跳过函数的括号组
-                ++t;
-                jump_paren();
-
-                continue;
-            } else if (t->val == cur_c_name && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
-                //可能是构造函数
-                if ((t-1)->val == "explicit") {
-                    //肯定是构造函数
-                    t->type = CPP_MEMBER_FUNCTION;
-                    t->subject = cur_c_name;
-                    class_fn.push_back({access, cur_c_name, t->val, std::deque<Token>(), Token()});
-
-                    ++t;
-                    jump_paren();
-                    if (t->type == CPP_COLON) {
-                        //初始化列表 跳过直至第一个 {
-                        ++t;
-                        while(t->type != CPP_OPEN_BRACE && t!=ts.end()) {
-                            ++t;
-                        }
-                        
-                    } else if (t->type == CPP_OPEN_BRACE) {
-                        //构造函数体
-                    } else if (t->type == CPP_SEMICOLON) {
-                        //构造函数定义
-                    } else {
-                        //错误
-                        std::cerr << "error class construction function.\n";
-                    }
-                                    
-                } else {
-                    auto t_may_c = t;
-                    ++t;
-                    jump_paren();
-                    if (t->type == CPP_COLON) {
-                        //初始化列表 是构造函数 跳过直至第一个 {
-                        // if (cur_c_name == "FPS") {
-                        //     std::cout << "got it\n";
-                        // }
-
-                        t_may_c->type = CPP_MEMBER_FUNCTION;
-                        t_may_c->subject = cur_c_name;
-                        class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
-                        ++t;
-                        while(t->type != CPP_OPEN_BRACE && t!=ts.end()) {
-                            ++t;
-                        }
-                    } else if (t->type == CPP_OPEN_BRACE) {
-                        //构造函数体  是构造函数
-                        t_may_c->type = CPP_MEMBER_FUNCTION;
-                        t_may_c->subject = cur_c_name;
-                        class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
-                    } else if (t->type == CPP_SEMICOLON) {
-                        //构造函数定义  是构造函数
-                        t_may_c->type = CPP_MEMBER_FUNCTION;
-                        t_may_c->subject = cur_c_name;
-                        class_fn.push_back({access, cur_c_name, t_may_c->val, std::deque<Token>(), Token()});
-                    } else {
-                        //不是构造函数
-                        continue;
-                    }
-                }
-            } else if(t->type == CPP_NAME && t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
-                //可能是成员函数
-                //std::cout << "may function: " << t->val << std::endl;
-                auto t_may_c = t;
-                ++t;
-                jump_paren();
-                if (t->type == CPP_OPEN_PAREN || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
+                jump_paren(t, ts);
+                if (t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw") {
                     t_may_c->type = CPP_MEMBER_FUNCTION;
                     t_may_c->subject = cur_c_name;
                     class_fn.push_back({access, cur_c_name, t_may_c->val, recall_fn_ret(t_may_c), Token()});
@@ -1752,9 +1430,6 @@ void ParserGroup::extract_class() {
         Parser& parser = *(*it);
         std::string file_name = _file_name[idx++];
         std::cout << "extract class in: " << file_name << std::endl;
-        if (file_name == "mi_targa_parser.h") {
-            std::cout << "got it";
-        }
         std::deque<Token>& ts = parser._ts;
         std::deque<Scope> scopes;
         Scope root_scope;
@@ -1842,6 +1517,10 @@ void ParserGroup::extract_class() {
                 //typedef struct {
                 // ...    
                 //}
+                if (t->val == "struct" && (t+1)->val == "IPCServerProxy") {
+                    std::cout << "got it\n";
+                }
+
                 if ((t+1)->type == CPP_OPEN_BRACE) {
                     ++t;
                     continue;
@@ -1862,18 +1541,33 @@ void ParserGroup::extract_class() {
                     continue;
                 }
 
+                if (t->type == CPP_SCOPE) {
+                    //类中类在类外定义
+                    ++t;
+                    goto CHECK_CLASS;
+                }
+
+
                 if (t->type == CPP_SEMICOLON) {
                     continue;
                 } else if (t->type == CPP_OPEN_BRACE) {
+                    if (next_class_template) {
+                        //TODO LABEL 不分析 tempalte类
+                        //跳过整个class体
+                        jump_brace(t,ts);
+                        ++t;
+                        continue;
+                    }
+
                     //类定义
                     t->type = CPP_CLASS_BEGIN;
                     jump_brace(t, ts);
                     assert(t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END);
                     t->type = CPP_CLASS_END;
                     if (next_class_template) {
-                        extrac_template_class(t_begin, t_begin, t, *cur_scope, ts);
+                        assert(false);
                     } else {
-                        extrac_class(t_begin, t_begin, t, *cur_scope, ts);
+                        extract_class(t_begin, t_begin, t, *cur_scope, ts);
                     }
                     ++t;
                     continue;
@@ -2186,9 +1880,6 @@ void ParserGroup::extract_container() {
         Parser& parser = *(*it);
         std::string file_name = _file_name[idx++];
         std::cout << "extract container: " << file_name << std::endl;
-        if (file_name == "mi_priority_queue.h") {
-            std::cout << "got it";
-        }
         std::deque<Token>& ts = parser._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto t_n = t+1;//::
@@ -2254,11 +1945,7 @@ void ParserGroup::extract_container() {
                         assert(false);
                     } else if (t->type == CPP_NAME) {
                         //TODO 应该是其他模块类型 直接合并
-                        if(t->val == "OpenMesh") {
-                            std::cout << "got it";
-                        }
-
-                        std::cout << "invalid template name 2: " << t->val << std::endl; 
+                        std::cout << "invalid 3th type: " << t->val << std::endl; 
                         //合并模板
                         std::stack<Token> tss;
                         Token tt = *t;
@@ -2661,6 +2348,9 @@ void ParserGroup::extract_class_member(
     std::deque<Token>::iterator t_end, 
     std::deque<Token>& ts) {
 
+    std::stack<Token> st_brace;
+    st_brace.push(*t);
+
     auto it_class = _g_class.find({cur_c_name, false, false, "", Scope()});
     assert(it_class != _g_class.end());
 
@@ -2675,14 +2365,21 @@ void ParserGroup::extract_class_member(
             sub_class_name = t->val;
             ++t;
             continue;
-        }
-        else if (t->type == CPP_CLASS_BEGIN) {
+        } else if (t->type == CPP_OPEN_BRACE) {
+            st_brace.push(*t);
+            ++t;
+            continue;
+        } else if (t->type == CPP_CLOSE_BRACE) {
+            st_brace.pop();
+            ++t;
+            continue;
+        } else if (t->type == CPP_CLASS_BEGIN) {
             //class嵌套
             auto t_begin0 = t;
             jump_brace(t, ts);
             extract_class_member(sub_class_name, t_begin0, t_begin0, t, ts);
             continue;
-        } else if (t->type == CPP_TYPE && t_n->type == CPP_NAME &&
+        } else if (st_brace.size() == 1 && t->type == CPP_TYPE && t_n->type == CPP_NAME &&
             ((t-1)->type == CPP_OPEN_BRACE || 
              (t-1)->type == CPP_CLOSE_BRACE ||
              (t-1)->type == CPP_COMMENT ||
@@ -2718,9 +2415,18 @@ void ParserGroup::extract_class_member(
                     }
                     ++t;
                     goto CHECK_MEMBER_VARIABLE_END;
+                } else if (t->type == CPP_EQ) {
+                    //带赋值构造的成员变量声明语句
+                    //直接跳到 ;
+                    while (t->type != CPP_SEMICOLON) {
+                        ++t;
+                    }
+                    goto CHECK_MEMBER_VARIABLE_END;
                 }
-                            
+
+                //不是成员函数
                 assert(false);
+                continue;  
             }
         } else if (t->type == CPP_MEMBER_FUNCTION) {
             //成员函数
@@ -2753,11 +2459,16 @@ void ParserGroup::extract_class_member(
 
 void ParserGroup::extract_class2() {
     //1 抽取成员变量, 细化成员函数的返回值
+    int idx = 0;
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         std::deque<Token>& ts = parser._ts;
+        std::string file_name = _file_name[idx++];
+        std::cout << "extract class2: " << file_name << std::endl;
+        if (file_name == "mi_console_echo.h") {
+            std::cout << "got";
+        }
         std::string cur_c_name;
-
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->type == CPP_CLASS || t->type == CPP_STURCT) {
                 cur_c_name = t->val;
@@ -2836,6 +2547,7 @@ void ParserGroup::extract_global_var_fn() {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         std::string file_name = _file_name[file_idx++];
+        std::cout << "extract global var fn : " << file_name << std::endl;
         bool is_h = false;
         if (file_name.size() > 2 && file_name.substr(file_name.size()-2, 2) == ".h") {
             is_h = true;
@@ -2938,6 +2650,26 @@ void ParserGroup::extract_global_var_fn() {
                         }
                         ++t;
                         goto CHECK_GLOBAL_VARIABLE_END;
+                    } else if (t->type == CPP_EQ) {
+                        //带赋值构造的成员变量声明语句
+                        //直接跳到 ;
+                        while (t->type != CPP_SEMICOLON) {
+                            ++t;
+                        }
+                        goto CHECK_GLOBAL_VARIABLE_END;
+                    } else if (t->type == CPP_LESS) {
+                        //模板参数如:
+                        //template<typename T>
+                        //int PQEleWrapper<T>::id_counter = 0;
+                        
+                        //跳过模板
+                        jump_angle_brace(t, ts);
+                        ++t;
+                        goto CHECK_GLOBAL_VARIABLE_END;
+                    } else if (t->type == CPP_SCOPE) {
+                        //跳过
+                        ++t;
+                        continue;
                     }
                     assert(false);
                 }
@@ -3890,9 +3622,6 @@ void ParserGroup::debug(const std::string& debug_out) {
         const std::deque<Token>& ts = parser.get_tokens();
         for (auto it2=ts.begin(); it2!=ts.end(); ++it2) {
             const Token& t = *it2;
-            // if (t.type == CPP_TYPE && t.val == "map") {
-            //     std::cout << "got it";
-            // }
             out << t.type << ": ";
 
             print_token(t, out);
