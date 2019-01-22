@@ -84,8 +84,6 @@ private:
     bool is_in_typedef(const std::string& name);
     bool is_in_typedef(const std::string& name, Token& t_type);
     
-    std::set<ClassType> is_in_class_function(const std::string& name);//待测试 好像没有用
-    
     bool is_member_function(const std::string& c_name, const std::string& fn_name);
     bool is_member_function(const std::string& c_name, const std::string& fn_name, Token& ret);
     bool is_local_function(const std::string& file_name, const std::string& fn_name, Token& t_type);
@@ -96,33 +94,68 @@ private:
     bool is_local_variable(const std::string& file_name, const std::string& v_name, Token& t_type);
 
     bool is_stl_container(const std::string& name);
+    bool is_stl_container_ret_iterator(const std::string& name);
+    bool is_stl_container_ret_val(const std::string& name);
 
-    void extract_class(std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, Scope cur_scope, std::deque<Token>& ts);
-    void extract_class_member(std::string c_name, std::deque<Token>::iterator& t, std::deque<Token>::iterator it_begin, std::deque<Token>::iterator it_end, std::deque<Token>& ts);
+    void extract_class(
+        std::deque<Token>::iterator& t, 
+        std::deque<Token>::iterator it_begin, 
+        std::deque<Token>::iterator it_end, 
+        Scope cur_scope, 
+        std::deque<Token>& ts,
+        bool is_template);
+
+    std::map<std::string, Token> get_template_class_type_paras(std::string c_name);
+
+    void extract_class_member(
+        std::string c_name, 
+        std::deque<Token>::iterator& t, 
+        std::deque<Token>::iterator it_begin, 
+        std::deque<Token>::iterator it_end, 
+        std::deque<Token>& ts, 
+        bool is_template);
 
     std::map<std::string, Token> label_skip_paren(std::deque<Token>::iterator& t, const std::deque<Token>& ts);
-    Token get_auto_type(std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, int case0);
+    Token get_auto_type(
+        std::deque<Token>::iterator t, 
+        const std::deque<Token>::iterator t_start, 
+        const std::string& class_name, 
+        const std::string& file_name, 
+        const std::map<std::string, Token>& paras,
+        bool is_cpp,
+        int case0);
     
     Token recall_subjust_type(
         std::deque<Token>::iterator t, 
         const std::deque<Token>::iterator t_start, 
         const std::string& class_name, 
         const std::string& file_name, 
-        const std::map<std::string, Token>& paras);
+        const std::map<std::string, Token>& paras,
+        bool is_cpp);
 
     Token get_subject_type(
         std::deque<Token>::iterator& t, 
         const std::deque<Token>::iterator t_start, 
         const std::string& class_name, 
         const std::string& file_name, 
-        const std::map<std::string, Token>& paras);
+        const std::map<std::string, Token>& paras,
+        bool is_cpp);
+    
+    Token get_fn_ret_type(
+        std::deque<Token>::iterator& t, 
+        const std::deque<Token>::iterator t_start, 
+        const std::string& class_name, 
+        const std::string& file_name, 
+        const std::map<std::string, Token>& paras,
+        bool is_cpp);
     
     bool is_call_in_module(std::deque<Token>::iterator& t, 
         const std::deque<Token>::iterator t_start,  
         const std::string& class_name, 
         const std::string& file_name, 
         const std::map<std::string, Token>& paras,
-        bool is_cpp);
+        bool is_cpp,
+        Token& fn_subject_type);
 
     void label_call_in_fn(std::deque<Token>::iterator t, 
         const std::deque<Token>::iterator t_start,
@@ -132,6 +165,7 @@ private:
         const std::map<std::string, Token>& paras,
         bool is_cpp);
         
+    std::map<std::string, Token> parse_tempalte_para(std::deque<Token>::iterator t_begin, std::deque<Token>::iterator t_end);
 private:
     std::vector<std::string> _file_name;
     std::vector<Parser*> _parsers;

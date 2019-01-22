@@ -112,7 +112,6 @@ enum TokenType {
     CPP_GLOBAL_VARIABLE, //全局变量
     CPP_FUNCTION,//定义在类外的过程
     CPP_CALL,//函数调用
-    CPP_ITERATOR,//stl容器的迭代器,分析过程调用的主语类型的时候临时标记
 };
 
 struct Token {
@@ -132,9 +131,6 @@ struct Token {
     //function 类型: 如果是空则是全局的
     //               如果有值则作用域为subject(这里是class名)
     std::string subject;
-
-    //临时变量: 如分析过程调用链条的时候作为中间单词是否带有解引用的标记
-    //int para;
 };
 
 //作用域, 为空是全局作用域
@@ -152,6 +148,7 @@ struct ClassType {
     bool is_template;
     std::string father;//不考虑多重继承
     Scope scope;
+    std::map<std::string, Token> tm_paras;//模板参数
 };
 
 struct ClassFunction {
@@ -201,18 +198,6 @@ inline bool operator < (const ClassVariable& l,  const ClassVariable& r) {
 inline bool operator < (const Function& l,  const Function& r) {
     l.name < r.name;
 }
-
-static const char* stl_containers[] = {
-"vector",
-"deque",
-"queue",
-"stack",
-"list",
-"set",
-"map",
-"pair",
-"auto_ptr",
-};
 
 static const char* keywords[] = {
 "alignas",
