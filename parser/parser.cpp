@@ -1973,7 +1973,7 @@ void ParserGroup::extract_container() {
                         Token tt = *t;
                         ++t;
                         ++step;
-                        while(t->type != CPP_GREATER && t->type != CPP_COMMA) {
+                        while(t->type != CPP_GREATER) {
                             tt.ts.push_back(*t);
                             if (t->type == CPP_LESS) {
                                 tss.push(*t);
@@ -1991,6 +1991,7 @@ void ParserGroup::extract_container() {
                                 ++step;
                                 continue;
                             } else if (t->type == CPP_GREATER && tss.empty()) {
+                                tt.ts.push_back(*t);
                                 --t;
                                 --step;
                                 break;
@@ -2887,48 +2888,48 @@ void ParserGroup::extract_local_var_fn() {
     }
 }
 
-// std::map<std::string, Token> ParserGroup::label_skip_paren(std::deque<Token>::iterator& t) {
-//     std::stack<Token> sbrace;
-//     assert(t->type == CPP_OPEN_PAREN);
-//     sbrace.push(*t);
-//     ++t;
-//     std::map<std::string, Token> paras;
-//     while(!sbrace.empty()) {
-//         if (t->type == CPP_CLOSE_PAREN) {
-//             assert(sbrace.top().type == CPP_OPEN_PAREN);
-//             sbrace.pop();
-//             ++t;
-//         } else if (t->type == CPP_OPEN_PAREN) {
-//             sbrace.push(*t);
-//             ++t;
-//         } else if (t->type == CPP_TYPE &&
-//                   (t+1) != ts.end() && (t+1)->type == CPP_OPEN_BRACE &&
-//                   (t+2) != ts.end() && (t+2)->type == CPP_AND &&
-//                   (t+3) != ts.end() && (t+3)->type == CPP_NAME &&
-//                   (t+4) != ts.end() && (t+4)->type == CPP_CLOSE_PAREN &&
-//                   (t+5) != ts.end() && (t+5)->type == CPP_OPEN_SQUARE) {
-//             //这种参数表 type(&name)[3]
-//             paras[(t+3)->val] = *t;
-//             t += 6;
-//         } else if (t->type == CPP_TYPE && 
-//                   (t+1) != ts.end() && (t+1)->type == CPP_NAME) {
-//             //经典的参数表 type name, type name, 
-//             paras[(t+1)->val] = *t;
-//             t+=2;
-//         } else {
-//             ++t;
-//         }
-//     }
-//     if (t->val == "const") {
-//         ++t;
-//     }
-//     if (t->val == "throw" && (t+1)!=ts.end() && (t+2)!=ts.end() &&
-//        (t+1)->type == CPP_OPEN_PAREN && (t+2)->type == CPP_CLOSE_PAREN) {
-//         t+=3;
-//     }
+std::map<std::string, Token> ParserGroup::label_skip_paren(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
+    std::stack<Token> sbrace;
+    assert(t->type == CPP_OPEN_PAREN);
+    sbrace.push(*t);
+    ++t;
+    std::map<std::string, Token> paras;
+    while(!sbrace.empty()) {
+        if (t->type == CPP_CLOSE_PAREN) {
+            assert(sbrace.top().type == CPP_OPEN_PAREN);
+            sbrace.pop();
+            ++t;
+        } else if (t->type == CPP_OPEN_PAREN) {
+            sbrace.push(*t);
+            ++t;
+        } else if (t->type == CPP_TYPE &&
+                  (t+1) != ts.end() && (t+1)->type == CPP_OPEN_BRACE &&
+                  (t+2) != ts.end() && (t+2)->type == CPP_AND &&
+                  (t+3) != ts.end() && (t+3)->type == CPP_NAME &&
+                  (t+4) != ts.end() && (t+4)->type == CPP_CLOSE_PAREN &&
+                  (t+5) != ts.end() && (t+5)->type == CPP_OPEN_SQUARE) {
+            //这种参数表 type(&name)[3]
+            paras[(t+3)->val] = *t;
+            t += 6;
+        } else if (t->type == CPP_TYPE && 
+                  (t+1) != ts.end() && (t+1)->type == CPP_NAME) {
+            //经典的参数表 type name, type name, 
+            paras[(t+1)->val] = *t;
+            t+=2;
+        } else {
+            ++t;
+        }
+    }
+    if (t->val == "const") {
+        ++t;
+    }
+    if (t->val == "throw" && (t+1)!=ts.end() && (t+2)!=ts.end() &&
+       (t+1)->type == CPP_OPEN_PAREN && (t+2)->type == CPP_CLOSE_PAREN) {
+        t+=3;
+    }
 
-//     return paras;
-// }
+    return paras;
+}
 
 // Token ParserGroup::label_get_auto_type(std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, int case0) {
 //     auto t_n = t+1;
@@ -2965,6 +2966,10 @@ void ParserGroup::extract_local_var_fn() {
 
 // }
 
+Token ParserGroup::get_auto_type(std::deque<Token>::iterator t, const std::deque<Token>::iterator t_start, int case0) {
+    return Token();
+}
+
 Token ParserGroup::recall_subjust_type(
     std::deque<Token>::iterator t, 
     const std::deque<Token>::iterator t_start, 
@@ -2985,7 +2990,7 @@ Token ParserGroup::recall_subjust_type(
         return it_p_v->second;
     }
 
-    //局部变量， 需要寻找赋值语句, 得获得赋值语句右部的类型
+    //局部变量
     while (t <= t_start) {
         auto t_p = t-1;
         auto t_n = t+1;
@@ -3002,19 +3007,7 @@ Token ParserGroup::recall_subjust_type(
             } else if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cout << "get type auto.\n";
-                return label_get_auto_type(t_p, t_start, 1);
-            } else if (t->val == "const_iterator" || t->val == "iterator") {
-                //迭代器 需要往前再回溯到容器
-                auto t_pp = t_p - 1;
-                assert(t_pp <= t_start);
-                assert(t_pp->type == CPP_SCOPE);
-                auto t_ppp = t_p - 2;
-                assert(t_ppp <= t_start);
-                assert(t_ppp->type == CPP_TYPE);
-                assert(is_stl_container(t_ppp->val));
-                Token tt = *t_ppp;
-                tt.type == CPP_ITERATOR;
-                return tt;
+                return get_auto_type(t_p, t_start, 1);
             } else {
                 std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
                 Token tt;
@@ -3033,7 +3026,7 @@ Token ParserGroup::recall_subjust_type(
             } else if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cout << "get type auto.\n";
-                return label_get_auto_type(t_p, t_start, 2);
+                return get_auto_type(t_p, t_start, 2);
             } else if (t->val == "const_iterator" || t->val == "iterator") {
                 //迭代器 需要往前再回溯到容器
                 auto t_pp = t_p - 1;
@@ -3494,7 +3487,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator& t,
 
         std::cout << "begin to find subject's type\n";
 
-        Token t_type = label_get_subject_type(t, t, class_name, file_name, paras);
+        Token t_type = get_subject_type(t, t, class_name, file_name, paras);
         std::cout  << class_name << "::" << fn_name << " called by " << t->val << " 's type: ";
         print_token(t_type, std::cout);
         std::cout << std::endl;
@@ -3574,7 +3567,7 @@ void ParserGroup::label_call()  {
                 //寻找()后有没有 {
                 const std::string fn_name = t->val;
                 ++t;
-                std::map<std::string, Token> paras = label_skip_paren(t);
+                std::map<std::string, Token> paras = label_skip_paren(t,ts);
                 if (t->type != CPP_OPEN_BRACE) {
                     //全局函数声明
                     std::cout << "global function decalartion: " << fn_name << std::endl;
@@ -3593,7 +3586,7 @@ void ParserGroup::label_call()  {
                 const std::string class_name = t->subject;
                 ++t;
 
-                std::map<std::string, Token> paras = label_skip_paren(t);
+                std::map<std::string, Token> paras = label_skip_paren(t,ts);
                 if (t->type != CPP_OPEN_BRACE) {
                     //类成员函数声明
                     std::cout << "member function decalartion: " << fn_name << std::endl;
