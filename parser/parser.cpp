@@ -2221,6 +2221,28 @@ void ParserGroup::extract_container() {
             }
         }
     }
+
+    //合并stl 迭代器
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *(*it);
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            auto t_n = t+1;
+            auto t_nn = t+2;
+            if (t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
+                t_n->type == CPP_SCOPE && (t_nn->val == "iterator" || t_nn->val == "const_iterator")) {
+                //合并
+                t_nn->type = CPP_TYPE;
+                t_nn->ts.clear();
+                t_nn->ts.push_back(*t);
+                t = ts.erase(t);//del container
+                t = ts.erase(t);//del ::
+                ++t;
+            } else {
+                ++t;
+            } 
+        }
+    } 
 }
 
 void ParserGroup::extract_extern_type() {
