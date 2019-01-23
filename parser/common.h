@@ -149,6 +149,7 @@ struct ClassType {
     std::string father;//不考虑多重继承
     Scope scope;
     std::map<std::string, Token> tm_paras;//模板参数
+    std::vector<std::string> tm_paras_list;
 };
 
 struct ClassFunction {

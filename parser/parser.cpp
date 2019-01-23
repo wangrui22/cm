@@ -1101,13 +1101,16 @@ static inline void jump_paren(std::deque<Token>::iterator& t, std::deque<Token>&
     }
 };
 
-std::map<std::string, Token> ParserGroup::parse_tempalte_para(
+void ParserGroup::parse_tempalte_para(
     std::deque<Token>::iterator t_begin, 
-    std::deque<Token>::iterator t_end) {
+    std::deque<Token>::iterator t_end,
+    std::map<std::string, Token>& paras,
+    std::vector<std::string>& paras_list) {
         
     assert(t_begin->type == CPP_LESS);
     assert(t_end->type == CPP_GREATER); 
-    std::map<std::string, Token> paras;
+    paras.clear();
+    paras_list.clear();
     auto t=t_begin+1;
     while (t < t_end) {
         if (t->val == "class" || t->val == "typename") {
@@ -1156,6 +1159,7 @@ std::map<std::string, Token> ParserGroup::parse_tempalte_para(
             }
 
             paras[t_name] = t_val;
+            paras_list.push_back(t_name);
             ++t;
             continue;           
         } else if (t->type == CPP_TYPE) {
@@ -1167,6 +1171,7 @@ std::map<std::string, Token> ParserGroup::parse_tempalte_para(
             }
             assert(t->type == CPP_NAME);
             paras[t->val] = t_t;
+            paras_list.push_back(t->val);
 
             ++t;
             continue;
@@ -1179,8 +1184,6 @@ std::map<std::string, Token> ParserGroup::parse_tempalte_para(
             continue;
         }
     }
-
-    return paras;
 }
 
 void ParserGroup::extract_class(
@@ -1216,6 +1219,7 @@ void ParserGroup::extract_class(
 
 
     std::map<std::string, Token> t_paras;
+    std::vector<std::string> t_paras_list;
     if (is_template) {
         assert(t->val == "template");
         //在class 和 struct前找到模板类型
@@ -1224,7 +1228,7 @@ void ParserGroup::extract_class(
         auto t_0 = t;
         jump_angle_brace(t, ts);
         assert(t->type == CPP_GREATER);
-        t_paras = parse_tempalte_para(t_0, t);
+        parse_tempalte_para(t_0, t, t_paras, t_paras_list);
         ++t;
         
         //把class定义范围的所有template 类型设置成CPP_TYPE
@@ -1314,7 +1318,7 @@ void ParserGroup::extract_class(
     assert(t->type == CPP_CLASS_BEGIN);
 
     if (_g_class.find(cur_c_name) == _g_class.end()) {
-        _g_class[cur_c_name] = {cur_c_name, is_struct, is_template, father, scope, t_paras};
+        _g_class[cur_c_name] = {cur_c_name, is_struct, is_template, father, scope, t_paras, t_paras_list};
     }
     if (_g_class_fn.find(cur_c_name) == _g_class_fn.end()) {
         _g_class_fn[cur_c_name] = std::vector<ClassFunction>();
@@ -3673,7 +3677,16 @@ void ParserGroup::debug(const std::string& debug_out) {
                 out << "class ";
             }
             if (c.is_template) {
-                out << "<> ";    
+                out << "< ";
+                for (auto j=0; j<c.tm_paras_list.size(); ++j) {
+                    auto tj = c.tm_paras.find(c.tm_paras_list[j]);
+                    assert (tj != c.tm_paras.end());
+                    print_token(tj->second, out);
+                    if (j != c.tm_paras_list.size()-1) {
+                        out << " , ";
+                    }
+                }    
+                out << "> ";
             }
         
             out << c.scope.key << "::" << c.name;

@@ -165,7 +165,11 @@ private:
         const std::map<std::string, Token>& paras,
         bool is_cpp);
         
-    std::map<std::string, Token> parse_tempalte_para(std::deque<Token>::iterator t_begin, std::deque<Token>::iterator t_end);
+    void parse_tempalte_para(
+        std::deque<Token>::iterator t_begin, 
+        std::deque<Token>::iterator t_end,
+        std::map<std::string, Token>& paras,
+        std::vector<std::string>& paras_list);
 private:
     std::vector<std::string> _file_name;
     std::vector<Parser*> _parsers;
