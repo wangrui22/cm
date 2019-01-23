@@ -1022,13 +1022,13 @@ void ParserGroup::extract_enum() {
     }
 }
 
-void add_base(const std::set<ClassType>& cs, ClassType c, std::set<ClassType>& bases) {
+void add_base(const std::map<std::string, ClassType>& cs, ClassType c, std::map<std::string, ClassType>& bases) {
     if (!c.father.empty()) {
-        auto c_f = cs.find({c.father,false,false,""});
+        auto c_f = cs.find(c.father);
         if (c_f != cs.end()) {
             //忽略三方模块的方法
-            bases.insert(*(c_f));
-            add_base(cs, *(c_f), bases);
+            bases[c_f->second.name] = c_f->second;
+            add_base(cs, c_f->second, bases);
         }
     }
 }
@@ -1313,13 +1313,13 @@ void ParserGroup::extract_class(
     }
     assert(t->type == CPP_CLASS_BEGIN);
 
-    if (_g_class.find({cur_c_name, is_struct, is_template, "", Scope()}) == _g_class.end()) {
-        _g_class.insert({cur_c_name, is_struct, is_template, father, scope, t_paras});
+    if (_g_class.find(cur_c_name) == _g_class.end()) {
+        _g_class[cur_c_name] = {cur_c_name, is_struct, is_template, father, scope, t_paras};
     }
-    if (_g_class_fn.find({cur_c_name, is_struct, is_template, "", Scope()}) == _g_class_fn.end()) {
-        _g_class_fn[{cur_c_name, is_struct, is_template, "", scope}] = std::vector<ClassFunction>();
+    if (_g_class_fn.find(cur_c_name) == _g_class_fn.end()) {
+        _g_class_fn[cur_c_name] = std::vector<ClassFunction>();
     }
-    std::vector<ClassFunction>& class_fn = _g_class_fn.find({cur_c_name, is_struct, is_template, "", Scope()})->second;
+    std::vector<ClassFunction>& class_fn = _g_class_fn.find(cur_c_name)->second;
 
     ++t;
     //分析成员变量和成员
@@ -1735,12 +1735,12 @@ void ParserGroup::extract_class() {
     while(!steady) {
         steady = true;
         for (auto it_c = _g_class.begin(); it_c != _g_class.end(); ++it_c) {
-        if (!it_c->father.empty() && it_c->father != "3th" && _g_class.find({it_c->father, false, false, "", Scope()}) == _g_class.end()) {
+        if (!it_c->second.father.empty() && it_c->second.father != "3th" && _g_class.find(it_c->second.father) == _g_class.end()) {
                 //LABEL 继承自三方库， 虚函数不能混淆
-                ClassType new_c = *it_c;
+                ClassType new_c = it_c->second;
                 new_c.father = "3th";
                 _g_class.erase(it_c);
-                _g_class.insert(new_c);
+                _g_class[new_c.name] = new_c;
                 steady = false;
                 break;
             }
@@ -1748,7 +1748,7 @@ void ParserGroup::extract_class() {
     }
 
     for (auto it_c = _g_class.begin(); it_c != _g_class.end(); ++it_c) {
-        _g_class_childs[*it_c] = std::set<ClassType>();
+        _g_class_childs[it_c->second.name] = std::map<std::string, ClassType>();
     }
 
     //构造类的所有child
@@ -1756,9 +1756,11 @@ void ParserGroup::extract_class() {
     while(!steady) {
         steady = true;
         for (auto it_c = _g_class_childs.begin(); it_c != _g_class_childs.end(); ++it_c) {
-            const ClassType& c = it_c->first;
+            auto it_c_f = _g_class.find(it_c->first);
+            assert(it_c_f != _g_class.end());
+            const ClassType& c = it_c_f->second;
             if (!c.father.empty()) {
-                auto it_base = _g_class_childs.find({c.father,false,false,"", Scope()});
+                auto it_base = _g_class_childs.find(c.father);
                 if (it_base == _g_class_childs.end()) {
                     //TODO 从三方模块继承, 这种类需要单独标记出来,不能混淆成员函数
                     continue;
@@ -1766,15 +1768,15 @@ void ParserGroup::extract_class() {
 
                 //assert(it_base != _g_class_childs.end());
 
-                auto it_item = it_base->second.find(c);
+                auto it_item = it_base->second.find(c.name);
                 if (it_item == it_base->second.end()) {
-                    it_base->second.insert(c);
+                    it_base->second[c.name] = c;
                     steady = false;
                 }
 
                 //把class的child都添加到class的base中去
                 for (auto it_cc = it_c->second.begin(); it_cc != it_c->second.end(); ++it_cc) {
-                    it_item = it_base->second.find(*it_cc);
+                    it_item = it_base->second.find(it_cc->first);
                     if (it_item == it_base->second.end()) {
                         it_base->second.insert(*it_cc);
                         steady = false;
@@ -1786,11 +1788,11 @@ void ParserGroup::extract_class() {
 
     //构造类的所有base
     for (auto it_c = _g_class.begin(); it_c != _g_class.end(); ++it_c) {
-        _g_class_bases[*it_c] = std::set<ClassType>();
+        _g_class_bases[it_c->first] = std::map<std::string, ClassType>();
     }
 
     for (auto it_c = _g_class.begin(); it_c != _g_class.end(); ++it_c) {
-        add_base(_g_class, *it_c, _g_class_bases[*it_c]);
+        add_base(_g_class, it_c->second, _g_class_bases[it_c->second.name]);
     }
 
 
@@ -2474,11 +2476,11 @@ void ParserGroup::extract_class_member (
     std::stack<Token> st_brace;
     st_brace.push(*t);
 
-    auto it_class = _g_class.find({cur_c_name, false, false, "", Scope()});
+    auto it_class = _g_class.find(cur_c_name);
     assert(it_class != _g_class.end());
 
-    _g_class_variable[*it_class] = std::vector<ClassVariable>();
-    std::vector<ClassVariable>& class_variable = _g_class_variable.find(*it_class)->second;
+    _g_class_variable[it_class->first] = std::vector<ClassVariable>();
+    std::vector<ClassVariable>& class_variable = _g_class_variable.find(it_class->first)->second;
 
     std::string sub_class_name;
     ++t;
@@ -2554,7 +2556,7 @@ void ParserGroup::extract_class_member (
         } else if (t->type == CPP_MEMBER_FUNCTION) {
             //成员函数
             if ((t-1)->type == CPP_TYPE) {
-                auto it_fc = _g_class_fn.find({cur_c_name, false,false,"", Scope()});
+                auto it_fc = _g_class_fn.find(cur_c_name);
                 assert (it_fc != _g_class_fn.end());
                 bool is_virtual = (t-2)->val == "virtual" || (t-3)->val == "virtual";
                 for (auto it_fn = it_fc->second.begin(); it_fn != it_fc->second.end(); ++it_fn) {
@@ -2624,7 +2626,7 @@ void ParserGroup::extract_class2() {
 
                 //LABEL 2 这里会把thread引用类成员函数作为入口函数,也标记成CPP_FUNCTION, 对接口混淆没有影响
                 if (is_in_class_struct(t_n->val, tm)) {
-                    auto it_fns = _g_class_fn.find({t_n->val, false, tm, ""});
+                    auto it_fns = _g_class_fn.find(t_n->val);
                     assert(it_fns != _g_class_fn.end());
                     //先判断是不是静态函数的调用
                     auto t_c = t_nnn+1;
@@ -2684,18 +2686,18 @@ void ParserGroup::extract_class2() {
     //TODO 没有区分 access, 没有去重
     for (auto it = _g_class.begin(); it != _g_class.end(); ++it) {
         //在成员函数中可以调用该类 以及该类所有基类的方法
-        std::vector<ClassFunction> fns = _g_class_fn.find(*it)->second;
+        std::vector<ClassFunction> fns = _g_class_fn.find(it->first)->second;
 
         //把所有基类的方法提取出来
-        auto it_bases = _g_class_bases.find(*it);
+        auto it_bases = _g_class_bases.find(it->first);
         assert(it_bases != _g_class_bases.end());
         
         for (auto it2 = it_bases->second.begin(); it2 != it_bases->second.end(); ++it2) {
-            std::vector<ClassFunction> fns_base = _g_class_fn.find(*it2)->second;
+            std::vector<ClassFunction> fns_base = _g_class_fn.find(it2->first)->second;
             fns.insert(fns.end(), fns_base.begin(), fns_base.end());
         }
 
-        _g_class_fn_with_base[*it] = fns;
+        _g_class_fn_with_base[it->first] = fns;
     }
     
 }
@@ -3663,36 +3665,38 @@ void ParserGroup::debug(const std::string& debug_out) {
             return;
         }
         for (auto it = _g_class.begin(); it != _g_class.end(); ++it) { 
-            if (it->is_struct) {
+            const std::string c_name = it->first;
+            const ClassType& c = it->second;
+            if (c.is_struct) {
                 out << "struct ";
             } else {
                 out << "class ";
             }
-            if (it->is_template) {
+            if (c.is_template) {
                 out << "<> ";    
             }
         
-            out << it->scope.key << "::" << it->name;
-            if (!it->father.empty()) {
-                out << " public : " << it->father;
+            out << c.scope.key << "::" << c.name;
+            if (!c.father.empty()) {
+                out << " public : " << c.father;
             }
             out << "\t";
 
             //print child 
             out << "child: ";
-            auto it_c = _g_class_childs.find(*it);
+            auto it_c = _g_class_childs.find(c_name);
             if (it_c != _g_class_childs.end()) {
                 for (auto it_cc = it_c->second.begin(); it_cc != it_c->second.end(); ++it_cc) {
-                    out << it_cc->scope.key << "::" <<it_cc->name << " ";
+                    out << it_cc->second.scope.key << "::" <<it_cc->second.name << " ";
                 }
             }
 
             //print base
             out << "base: ";
-            auto it_b = _g_class_bases.find(*it);
+            auto it_b = _g_class_bases.find(c_name);
             if (it_b != _g_class_bases.end()) {
                 for (auto it_bc = it_b->second.begin(); it_bc != it_b->second.end(); ++it_bc) {
-                    out << it_bc->scope.key << "::" <<it_bc->name << " ";
+                    out << it_bc->second.scope.key << "::" <<it_bc->second.name << " ";
                 }
             }
 
@@ -3893,8 +3897,8 @@ bool ParserGroup::is_in_marco(const std::string& m, Token& val) {
 
 bool ParserGroup::is_in_class_struct(const std::string& name, bool& tm) {
     for (auto it=_g_class.begin(); it != _g_class.end(); ++it) {
-        if (it->name == name) {
-            tm = it->is_template;
+        if (it->first == name) {
+            tm = it->second.is_template;
             return true;
         }
     }
@@ -3917,7 +3921,7 @@ bool ParserGroup::is_in_typedef(const std::string& name, Token& t_type) {
 }
 
 bool ParserGroup::is_member_function(const std::string& c_name, const std::string& fn_name) {
-    auto it_fn = _g_class_fn_with_base.find({c_name, false,false, ""});
+    auto it_fn = _g_class_fn_with_base.find(c_name);
     if (it_fn != _g_class_fn_with_base.end()) {
         std::vector<ClassFunction> fns = it_fn->second;
         for (auto it = fns.begin(); it != fns.end(); ++it) {
@@ -3931,7 +3935,7 @@ bool ParserGroup::is_member_function(const std::string& c_name, const std::strin
 }
 
 bool ParserGroup::is_member_function(const std::string& c_name, const std::string& fn_name, Token& ret) {
-    auto it_fns = _g_class_fn_with_base.find({c_name, false,false, ""});
+    auto it_fns = _g_class_fn_with_base.find(c_name);
     if (it_fns == _g_class_fn_with_base.end()) {
         return false;
     }
@@ -3947,7 +3951,7 @@ bool ParserGroup::is_member_function(const std::string& c_name, const std::strin
 }
 
 bool ParserGroup::is_member_variable(const std::string& c_name, const std::string& c_v_name, Token& t_type) {
-    auto it_c_vs = _g_class_variable.find({c_name,false,false,""});
+    auto it_c_vs = _g_class_variable.find(c_name);
     if (it_c_vs != _g_class_variable.end()) {
         for (auto it_v = it_c_vs->second.begin(); it_v != it_c_vs->second.end(); ++it_v) {
             if (it_v->m_name == c_v_name) {
@@ -3961,9 +3965,9 @@ bool ParserGroup::is_member_variable(const std::string& c_name, const std::strin
 }
 
 std::map<std::string, Token> ParserGroup::get_template_class_type_paras(std::string c_name) {
-    auto it_c = _g_class.find({c_name,false,false,""});
+    auto it_c = _g_class.find(c_name);
     if (it_c != _g_class.end()) {
-        return it_c->tm_paras;
+        return it_c->second.tm_paras;
     } else {
         return std::map<std::string, Token>();
     }
