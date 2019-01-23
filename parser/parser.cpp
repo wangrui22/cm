@@ -4054,7 +4054,11 @@ void ParserGroup::label_call()  {
                 std::cout << "label call in fn: " << fn_name << std::endl;
 
                 std::map<std::string, Token> paras = label_skip_paren(t,ts);
-                if (t->type != CPP_OPEN_BRACE) {
+                while(t->type != CPP_SEMICOLON && t->type != CPP_OPEN_BRACE) {
+                    ++t;
+                }
+
+                if (t->type == CPP_SEMICOLON) {
                     //全局函数声明
                     std::cout << "global function decalartion: " << fn_name << std::endl;
                     ++t;
@@ -4075,7 +4079,10 @@ void ParserGroup::label_call()  {
                 std::cout << "label call in class fn: " << fn_name << std::endl;
 
                 std::map<std::string, Token> paras = label_skip_paren(t,ts);
-                if (t->type != CPP_OPEN_BRACE) {
+                while(t->type != CPP_SEMICOLON && t->type != CPP_OPEN_BRACE) {
+                    ++t;
+                }
+                if (t->type == CPP_SEMICOLON) {
                     //类成员函数声明
                     std::cout << "member function decalartion: " << fn_name << std::endl;
                     ++t;
