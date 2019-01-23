@@ -1033,7 +1033,7 @@ void add_base(const std::map<std::string, ClassType>& cs, ClassType c, std::map<
     }
 }
 
-static inline void jump_brace(std::deque<Token>::iterator& t, std::deque<Token>& ts) {
+static inline void jump_brace(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
     assert(t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN);
     std::stack<Token> ss;
     ss.push(*t);
@@ -1055,7 +1055,7 @@ static inline void jump_brace(std::deque<Token>::iterator& t, std::deque<Token>&
     }
 }
 
-static inline void jump_angle_brace(std::deque<Token>::iterator& t, std::deque<Token>& ts) {
+static inline void jump_angle_brace(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
     assert(t->type == CPP_LESS);
     std::stack<Token> ss;
     ss.push(*t);
@@ -1077,7 +1077,7 @@ static inline void jump_angle_brace(std::deque<Token>::iterator& t, std::deque<T
     }
 }
 
-static inline void jump_paren(std::deque<Token>::iterator& t, std::deque<Token>& ts) {
+static inline void jump_paren(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
     std::stack<Token> s_de;
     while (t->type != CPP_OPEN_PAREN && t != ts.end()) {
         ++t;
@@ -1089,8 +1089,11 @@ static inline void jump_paren(std::deque<Token>::iterator& t, std::deque<Token>&
     // )
     ++t;
     while (!s_de.empty()) {
-        if (t->type == CPP_CLOSE_PAREN && s_de.top().type == CPP_OPEN_PAREN) {
+        if (t->type == CPP_CLOSE_PAREN) {
             s_de.pop();
+            if (s_de.empty()) {
+                continue;
+            }
             ++t;
         } else if (t->type == CPP_OPEN_PAREN) {
             s_de.push(*t);
@@ -1476,6 +1479,7 @@ void ParserGroup::extract_class(
                 //跳过函数的括号组
                 ++t;
                 jump_paren(t, ts);
+                ++t;
 
                 continue;
             } else if (t->val == cur_c_name && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
@@ -1488,6 +1492,7 @@ void ParserGroup::extract_class(
 
                     ++t;
                     jump_paren(t, ts);
+                    ++t;
                     if (t->type == CPP_COLON) {
                         //初始化列表 跳过直至第一个 {
                         ++t;
@@ -1508,6 +1513,7 @@ void ParserGroup::extract_class(
                     auto t_may_c = t;
                     ++t;
                     jump_paren(t, ts);
+                    ++t;
                     if (t->type == CPP_COLON) {
                         //初始化列表 是构造函数 跳过直至第一个 {
                         t_may_c->type = CPP_MEMBER_FUNCTION;
@@ -1542,6 +1548,7 @@ void ParserGroup::extract_class(
                 auto t_may_c = t;
                 ++t;
                 jump_paren(t, ts);
+                ++t;
                 if (t->type == CPP_OPEN_BRACE || t->type == CPP_SEMICOLON || t->val == "const" || t->val == "throw" || (t->type == CPP_EQ && (t+1)->val == "0")) {
                     t_may_c->type = CPP_MEMBER_FUNCTION;
                     t_may_c->subject = cur_c_name;
@@ -1576,6 +1583,7 @@ void ParserGroup::extract_class(
                 ++t;
                 assert(t->type == CPP_OPEN_PAREN);
                 jump_paren(t,ts);
+                ++t;
                 continue;
             } else {
                 ++t;
@@ -1590,6 +1598,9 @@ void ParserGroup::extract_class() {
         Parser& parser = *(*it);
         std::string file_name = _file_name[idx++];
         std::cout << "extract class in: " << file_name << std::endl;
+        if (file_name == "mi_sdf.cpp") {
+            std::cout << "gotit";
+        }
         std::deque<Token>& ts = parser._ts;
         std::deque<Scope> scopes;
         Scope root_scope;
@@ -1620,10 +1631,27 @@ void ParserGroup::extract_class() {
                 t+=3;
                 continue;
             } else if (t->val=="namespace" && (t+1)->type == CPP_OPEN_BRACE) {
-                //不可以在匿名域中定义class
-                ++t;
-                jump_brace(t, ts);
-                ++t;
+                // //不可以在匿名域中定义class
+                // ++t;
+                // jump_brace(t, ts);
+                // ++t;
+                // continue;
+                //匿名区域
+                Scope sub;
+                sub.type = 0;
+                sub.name = ANONYMOUS_SCOPE;
+                sub.sb.push(*(t+1));
+                sub.father = scopes;
+                for (auto itc = scopes.begin(); itc != scopes.end(); ++itc) {
+                    if (!itc->name.empty()) {
+                        sub.key += itc->name + "::"; 
+                    }
+                }
+                sub.key += sub.name;
+                
+                scopes.push_back(sub);
+                cur_scope = &scopes.back();
+                t+=2;
                 continue;
             } else if (t->type == CPP_OPEN_BRACE) {
                 cur_scope->sb.push(*t);
@@ -2323,36 +2351,91 @@ void ParserGroup::extract_container() {
     } 
 }
 
+static ScopeType parse_scope(std::string& scope_name, 
+    std::deque<Token>::iterator t_begin, 
+    std::deque<Token>::iterator t_end,
+    const std::deque<Token>& ts) {
+    ScopeType scope;
+    scope.scope = scope_name;
+    auto t = t_begin;
+    ++t;
+    while(t < t_end) {
+        if ((t->type == CPP_NAME || t->type == CPP_TYPE) && (t+1)!=ts.end() && (t+1)->type == CPP_OPEN_BRACE) {
+            //sub scope
+            std::string sub_scope_name = t->val;
+            ++t;
+            auto t_begin0 = t;
+            jump_brace(t, ts);
+            ScopeType sub_scope = parse_scope(sub_scope_name, t_begin0, t, ts);
+            scope.sub_scope[sub_scope.scope] = sub_scope;
+            ++t;
+            continue;
+        } else if ((t->type == CPP_NAME || t->type == CPP_TYPE) && ((t+1)->type == CPP_COMMA || (t+1)->type == CPP_SEMICOLON)) {
+            scope.types.insert(t->val);
+            t+=2;
+            continue;
+        } else {
+            ++t;
+            continue;
+        }
+    }
+    return scope;
+}
+
 void ParserGroup::extract_extern_type() {
-    //抽取std boost类型
-    //TODO 这里可以用配置文件来做, 不仅仅是std boost还可以是其他的三方模块
-    ScopeType std_scope;
-    std_scope.scope = "std";
-    std_scope.types.insert("string");
-    std_scope.types.insert("atomic_int");
-    std_scope.types.insert("atomic_bool");
-    std_scope.types.insert("ifstream");
-    std_scope.types.insert("ofstream");
-    std_scope.types.insert("iostream");
-    std_scope.types.insert("fstream");
-    std_scope.types.insert("sstream");
-    
 
-    ScopeType boost_scope;
-    boost_scope.scope = "boost";
-    boost_scope.types.insert("thread");
-    boost_scope.types.insert("mutex");
-    boost_scope.types.insert("condition");
-    boost_scope.types.insert("unique_lock");
+    Reader reader;
+    reader.read("./extern_type");
+    Parser parser;
+    while(true) {
+        parser.push_token(parser.lex(&reader));
+        if (reader.eof()) {
+            break;
+        }
+    }
 
-    ScopeType boost_mutex;
-    boost_mutex.scope = "mutex";
-    boost_mutex.types.insert("scoped_lock");
-    boost_scope.sub_scope.insert(boost_mutex);
+    std::deque<Token>& ts = parser._ts;
+    std::map<std::string, ScopeType> scopes;
+    for (auto t = ts.begin(); t != ts.end(); ) { 
+        if(t->type == CPP_BR) {
+            t = ts.erase(t);
+            continue;
+        } else {
+            ++t;
+        }
+    }
+
+    for (auto t = ts.begin(); t != ts.end(); ) {
+        if ((t->type == CPP_NAME || t->type == CPP_TYPE) && (t+1)!=ts.end() && (t+1)->type == CPP_OPEN_BRACE) {
+            //找到一个scope
+            std::string s_name = t->val;
+            ++t;
+            auto t_begin = t;
+            jump_brace(t,ts);
+            scopes[s_name] = parse_scope(s_name, t_begin, t, ts);
+            ++t;
+            continue;
+        } else {
+            ++t;
+        }
+    }
+
+    ScopeType _3th_scope;
+    auto it_3th = scopes.find("_3th");
+    if (it_3th != scopes.end()) {
+        _3th_scope = it_3th->second;
+        scopes.erase(it_3th);
+    }
 
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         std::deque<Token>& ts = parser._ts;
+
+        //using只对当前文件后续的内容有效
+        //TODO 这里忽略函数作用域的using
+        std::map<std::string, ScopeType> using_scope;
+        std::set<std::string> using_types;
+
         for (auto t = ts.begin(); t != ts.end(); ) {
 
             //---------------------------------------------------------//
@@ -2372,8 +2455,10 @@ void ParserGroup::extract_extern_type() {
                     return;
                 }
 
+                //std::cout << t_n->val << std::endl;
+
                 if (t_n->type == CPP_SCOPE) {
-                    auto it_sub_scope = last_scope->sub_scope.find({t_nn->val, std::set<std::string>(), std::set<ScopeType>()});
+                    auto it_sub_scope = last_scope->sub_scope.find(t_nn->val);
                     auto it_type = last_scope->types.find(t_nn->val);
 
                     if (it_sub_scope != last_scope->sub_scope.end() && it_type != last_scope->types.end() && t_nnn != ts.end() && t_nnn->type == CPP_SCOPE) {
@@ -2382,7 +2467,7 @@ void ParserGroup::extract_extern_type() {
                         ts_to_be_type.back().subject = last_scope->scope;
                         t+=2;
 
-                        last_scope = &(*it_sub_scope);
+                        last_scope = &(it_sub_scope->second);
 
                     } else if (it_type != last_scope->types.end()) {
                         //end 
@@ -2397,10 +2482,9 @@ void ParserGroup::extract_extern_type() {
                         ts_to_be_type.back().subject = last_scope->scope;
                         t+=2;
 
-                        last_scope = &(*it_sub_scope);
+                        last_scope = &(it_sub_scope->second);
                     } else {
-                        //std function
-                        std::cout << scope_root << " function: " << t_nn->val << std::endl;
+                        std::cout << scope_root << " unknow intem(may function) " << t_nn->val << std::endl;
                         ++t;
                         return;
                     } 
@@ -2423,7 +2507,7 @@ void ParserGroup::extract_extern_type() {
                     }
                     return;
                 } else {
-                    std::cerr << "err here.\n";
+                    std::cout << "unregister scope:" << scope_root << " item " << t_nn->val << std::endl;
                 }
 
                 ++t;
@@ -2432,15 +2516,231 @@ void ParserGroup::extract_extern_type() {
             //---------------------------------------------------------//
 
             //抽取所有的std的类型
-            if (t->val == "std") {
-                greedy_scope_analyze(std_scope, "std");
-            } else if (t->val == "boost") {
-                greedy_scope_analyze(boost_scope, "boost");
+            auto t_s = scopes.find(t->val);
+            if (t_s != scopes.end()) {
+                greedy_scope_analyze(t_s->second, t_s->first);
+                continue;
+            }
+
+            if (using_types.find(t->val) != using_types.end()) {
+                t->type = CPP_TYPE;
+                ++t;
+                continue;
+            }
+
+            if (_3th_scope.types.find(t->val) != _3th_scope.types.end()) {
+                t->type = CPP_TYPE;
+                ++t;
+                continue;
+            }
+
+            for (auto t0 = using_scope.begin(); t0 != using_scope.end(); ++t0) {
+                if (t0->second.types.find(t->val) != t0->second.types.end()) {
+                    t->type = CPP_TYPE;
+                    ++t;
+                    break;
+                }
+
+                auto tsub = t0->second.sub_scope.find({t->val});
+                if ( tsub != t0->second.sub_scope.end()) {
+                    greedy_scope_analyze(tsub->second, tsub->first);
+                    break;
+                }
+            }
+
+
+            //只处理文件类型的using, 不处理函数内部的using
+            if (t->val == "using" & (t+1)!= ts.end() && 
+                (t+2)!= ts.end() && (t+2)->type == CPP_EQ) {
+                //using x = xx;
+                using_types.insert((t+1)->val);
+                ++t;
+                continue;
+            } else if (t->val == "using" & (t+1)!= ts.end() && (t+1)->val == "namespace") {
+                ScopeType cst;
+                t+=2;
+                auto t_s = scopes.find(t->val);
+                if (t_s != scopes.end()) {
+                    cst = t_s->second;
+                } else {
+                    std::cerr<< "unknow 3th scope or inner namespace " << (t+2)->val << std::endl;
+                    //assert(false);
+                }
+                ++t;
+
+            GET_SUB_SCOPE:
+                if (t->type == CPP_SCOPE) {
+                    //嵌套
+                    ++t;
+                    auto t_s0 = cst.sub_scope.find({t->val});
+                    if (t_s0 == cst.sub_scope.end()) {
+                        std::cerr<< "unknow 3th scope or inner namespace " << (t+2)->val << std::endl;
+                        ++t;
+                        continue;
+                        //assert(false);
+                    }
+                    ScopeType ttt = t_s0->second;
+                    cst = ttt;
+                    ++t;
+                    goto GET_SUB_SCOPE;
+                } else if (t->type == CPP_SEMICOLON) {
+                    using_scope[cst.scope] = cst;
+                } else {
+                    std::cerr<< "unknow 3th scope or inner namespace " << (t+2)->val << std::endl;
+                    ++t;
+                    continue;
+                }
             }
 
             ++t;
         }
     }
+    
+
+    // //抽取std boost类型
+    // //TODO 这里可以用配置文件来做, 不仅仅是std boost还可以是其他的三方模块
+    // ScopeType std_scope;
+    // std_scope.scope = "std";
+    // std_scope.types.insert("string");
+    // std_scope.types.insert("atomic_int");
+    // std_scope.types.insert("atomic_bool");
+    // std_scope.types.insert("ifstream");
+    // std_scope.types.insert("ofstream");
+    // std_scope.types.insert("iostream");
+    // std_scope.types.insert("fstream");
+    // std_scope.types.insert("sstream");
+    
+
+    // ScopeType boost_scope;
+    // boost_scope.scope = "boost";
+    // boost_scope.types.insert("thread");
+    // boost_scope.types.insert("mutex");
+    // boost_scope.types.insert("condition");
+    // boost_scope.types.insert("unique_lock");
+
+    // ScopeType boost_mutex;
+    // boost_mutex.scope = "mutex";
+    // boost_mutex.types.insert("scoped_lock");
+    // boost_scope.sub_scope.insert(boost_mutex);
+
+    // ScopeType json;
+    // json.scope = "nlohmann";
+    // json.types.insert("json");
+
+    // ScopeType uws;
+    // uws.scope
+
+
+    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+    //     Parser& parser = *(*it);
+    //     std::deque<Token>& ts = parser._ts;
+    //     for (auto t = ts.begin(); t != ts.end(); ) {
+
+    //         //---------------------------------------------------------//
+    //         //common function
+    //         std::function<void(const ScopeType&, const std::string&)> greedy_scope_analyze = [&t, &ts](const ScopeType& scope_type, const std::string& scope_root) {
+    //             TokenType to_be_type = CPP_NAME;
+    //             const ScopeType* last_scope = &scope_type;
+    //             std::deque<Token> ts_to_be_type;
+
+    // SCOPE_:
+    //             auto t_n = t+1;
+    //             auto t_nn = t+2;
+    //             auto t_nnn = t+3;
+    //             if (t_n == ts.end() || t_nn == ts.end()) {
+    //                 std::cerr << "std scope err\n";
+    //                 ++t;
+    //                 return;
+    //             }
+
+    //             if (t_n->type == CPP_SCOPE) {
+    //                 auto it_sub_scope = last_scope->sub_scope.find({t_nn->val, std::set<std::string>(), std::set<ScopeType>()});
+    //                 auto it_type = last_scope->types.find(t_nn->val);
+
+    //                 if (it_sub_scope != last_scope->sub_scope.end() && it_type != last_scope->types.end() && t_nnn != ts.end() && t_nnn->type == CPP_SCOPE) {
+    //                     ts_to_be_type.push_back(*t_n);//::
+    //                     ts_to_be_type.push_back(*t_nn);//type
+    //                     ts_to_be_type.back().subject = last_scope->scope;
+    //                     t+=2;
+
+    //                     last_scope = &(*it_sub_scope);
+
+    //                 } else if (it_type != last_scope->types.end()) {
+    //                     //end 
+    //                     to_be_type = CPP_TYPE;
+    //                     ts_to_be_type.push_back(*t_n);//::
+    //                     ts_to_be_type.push_back(*t_nn);//type
+    //                     ts_to_be_type.back().subject = last_scope->scope;
+    //                     t+=3;
+    //                 } else if (it_sub_scope != last_scope->sub_scope.end()) {
+    //                     ts_to_be_type.push_back(*t_n);//::
+    //                     ts_to_be_type.push_back(*t_nn);//type
+    //                     ts_to_be_type.back().subject = last_scope->scope;
+    //                     t+=2;
+
+    //                     last_scope = &(*it_sub_scope);
+    //                 } else {
+    //                     //std function
+    //                     std::cout << scope_root << " function: " << t_nn->val << std::endl;
+    //                     ++t;
+    //                     return;
+    //                 } 
+    //                 goto SCOPE_;
+    //             } else if (!ts_to_be_type.empty() && to_be_type == CPP_TYPE) {
+    //                 t -= (ts_to_be_type.size()+1);
+    //                 assert(t->val == scope_root);
+    //                 t->ts.clear();
+    //                 for (auto it_types = ts_to_be_type.begin(); it_types != ts_to_be_type.end(); ++it_types) {
+    //                     if (it_types->type != CPP_SCOPE) {
+    //                         t->ts.push_back(*it_types);
+    //                     }
+    //                 }
+    //                 t->type = CPP_TYPE;
+    //                 t->subject = scope_type.scope;
+    //                 ++t;
+    //                 while(!ts_to_be_type.empty()) {
+    //                     ts_to_be_type.pop_back();
+    //                     t = ts.erase(t);
+    //                 }
+    //                 return;
+    //             } else {
+    //                 std::cerr << "err here.\n";
+    //             }
+
+    //             ++t;
+    //             return;
+    //         };
+    //         //---------------------------------------------------------//
+
+    //         //抽取所有的std的类型
+    //         if (t->val == "std") {
+    //             greedy_scope_analyze(std_scope, "std");
+    //         } else if (t->val == "boost") {
+    //             greedy_scope_analyze(boost_scope, "boost");
+    //         }
+
+    //         ++t;
+    //     }
+    // }
+
+    // static const char* ex_types[] = {
+    //     "cv_errcode",
+    // };
+    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+    //     Parser& parser = *(*it);
+    //     std::deque<Token>& ts = parser._ts;
+    //     for (auto t = ts.begin(); t != ts.end(); ) {
+    //         if (t->type == CPP_NAME) {
+    //             for(int i=0; i<sizeof(ex_types)/sizeof(char*); ++i) {
+    //                 if (t->val == ex_types[i]) {
+    //                     t->type == CPP_TYPE;
+    //                 }
+    //             }
+    //         }
+
+    //         ++t;
+    //     }
+    // }
 }
 
 void ParserGroup::combine_type_with_multi_and() {
@@ -2644,19 +2944,22 @@ void ParserGroup::extract_class2() {
                         //类静态成员变量赋值
                         t+=3;
                         continue;
-                    } else if(t_c->type == CPP_OPEN_PAREN) {
-                        jump_paren(t_c,ts);
-                        if (t_c->type != CPP_OPEN_BRACE) {
-                            //这里是静态函数调用
-                            t+= 3;
-                            continue;
-                        }
-                    } else {
-                        //其他场景
-                        //如静态参数的调用，比如　B a(A::s_m); 这种
-                        t+=3;
-                        continue;
-                    }
+                    } 
+                    // else if(t_c->type == CPP_OPEN_PAREN) {
+                    //     jump_paren(t_c,ts);
+                    //     ++t;
+                    //     if (t_c->type != CPP_OPEN_BRACE) {
+                    //         //这里是静态函数调用
+                    //         t+= 3;
+                    //         continue;
+                    //     }
+                    // } 
+                    // else {
+                    //     //其他场景
+                    //     //如静态参数的调用，比如　B a(A::s_m); 这种
+                    //     t+=3;
+                    //     continue;
+                    // }
 
                     for (auto it_fn = it_fns->second.begin(); it_fn != it_fns->second.end(); ++it_fn) {
                         const ClassFunction& fn = *it_fn;
@@ -2712,7 +3015,6 @@ void ParserGroup::extract_global_var_fn() {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         std::string file_name = _file_name[file_idx++];
-        std::cout << "extract global var fn : " << file_name << std::endl;
         bool is_h = false;
         if (file_name.size() > 2 && file_name.substr(file_name.size()-2, 2) == ".h") {
             is_h = true;
@@ -2725,43 +3027,114 @@ void ParserGroup::extract_global_var_fn() {
             continue;
         }
 
+        std::cout << "extract global var fn : " << file_name << std::endl;
+
         std::deque<Token>& ts = parser._ts;
-        std::stack<Token> st_brace;//作用域最上层
-        std::stack<Token> st_paren;//不在()内,跳过函数参数表
-        //std::cout << "parse global variable from : " << it->first << std::endl;
+        std::deque<Scope> scopes;
+        Scope root_scope;
+        root_scope.type = 0;
+        scopes.push_back(root_scope);
+        Scope* cur_scope = &(scopes.back());
         for (auto t = ts.begin(); t != ts.end(); ) {
+            bool next_class_template = false;
+            auto t_template = t;
+            if (t->val=="namespace" &&
+                (t+1)!= ts.end() && (t+1)->type == CPP_NAME &&
+                (t+2)!= ts.end() && (t+2)->type == CPP_OPEN_BRACE) {
+                Scope sub;
+                sub.type = 0;
+                sub.name = (t+1)->val;
+                sub.sb.push(*(t+1));
+                sub.father = scopes;
+                for (auto itc = scopes.begin(); itc != scopes.end(); ++itc) {
+                    if (!itc->name.empty()) {
+                        sub.key += itc->name + "::"; 
+                    }
+                }
+                sub.key += sub.name;
+                
+                scopes.push_back(sub);
+                cur_scope = &scopes.back();
+                t+=3;
+                continue;
+            } else if (t->val=="namespace" && (t+1)->type == CPP_OPEN_BRACE) {
+                //不可以在匿名域中定义class
+                ++t;
+                jump_brace(t, ts);
+                ++t;
+                continue;
+            } else if (t->type == CPP_OPEN_BRACE) {
+                cur_scope->sb.push(*t);
+                ++t;
+                continue;
+            } else if (t->type == CPP_CLOSE_BRACE) {
+                cur_scope->sb.pop();
+                if (!cur_scope->name.empty() && cur_scope->sb.empty()) {
+                    //如果不是默认作用域 则跳出当前作用域
+                    scopes.pop_back();
+                    cur_scope = &scopes.back();
+                }
+                ++t;
+                continue;
+            }
+
+            //跳过class
+            if (t->type == CPP_CLASS_BEGIN) {
+                jump_brace(t, ts);
+                assert(t->type == CPP_CLASS_END);
+                ++t;
+                continue;
+            }
+
+            //提取模板参数
+            std::map<std::string, Token> t_paras; 
+            std::vector<std::string> t_paras_list;
+            if(t->val == "template" && (t+1)->type == CPP_LESS) {
+                ++t;
+                auto t_begin = t;
+                jump_angle_brace(t, ts);
+                parse_tempalte_para(t_begin, t, t_paras, t_paras_list);
+                ++t;
+            } 
+
             auto t_n = t+1;
             auto t_nn = t+2;
-            if (t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN) {
-                st_brace.push(*t);
-            } else if (t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END) {
-            assert(st_brace.top().type == CPP_OPEN_BRACE || st_brace.top().type == CPP_CLASS_BEGIN);
-                st_brace.pop();
-            } if (t->type == CPP_OPEN_PAREN) {
-                st_paren.push(*t);
-            } else if (t->type == CPP_CLOSE_PAREN) {
-                assert(st_paren.top().type == CPP_OPEN_PAREN);
-                st_paren.pop();
-            } else if(t->val == "template" && t_n->type == CPP_LESS) {
-                //跳过模板参数
-                std::stack<Token> st_angle;//不在<>内, 跳过模板
-                ++t;
-                st_angle.push(*t);
-                ++t;
-                while(!st_angle.empty()) {
-                    if (t->type == CPP_GREATER) {
-                        assert(st_angle.top().type == CPP_LESS);
-                        st_angle.pop();
-                    } else if (t->type == CPP_LESS) {
-                        st_angle.push(*t);
+
+            //全局运算符重载函数
+            if (t->val == "operator") {
+                t->type = CPP_MEMBER_FUNCTION;
+                if((t+1)->type == CPP_OPEN_PAREN && (t+2)->type == CPP_CLOSE_PAREN) {
+                    t->ts.push_back(*(t+1));
+                    t->ts.push_back(*(t+2));
+                    t++;
+                    t = ts.erase(t);//(
+                    t = ts.erase(t);//)
+                    --t;
+                    //TODO 这里不记录运算符重载函数
+                } else {
+                    //合并到第一个(之前的运算符
+                    auto t_op = t;
+                    ++t;
+                    while(t->type != CPP_OPEN_PAREN) {
+                        t_op->ts.push_back(*t);
+                        t = ts.erase(t);
                     }
+                    --t;
+                    //TODO 这里不记录运算符重载函数
+                }
+                ++t;
+                assert(t->type == CPP_OPEN_PAREN);
+                jump_paren(t,ts);
+                ++t;
+                if (t->type == CPP_OPEN_BRACE) {
+                    jump_brace(t,ts);
                     ++t;
                 }
                 continue;
+            }
 
-            } 
             //全局变量的提取
-            else if (st_brace.empty() && st_paren.empty() && t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
+            if (t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
                 t_n->type == CPP_NAME && t_nn->type != CPP_SCOPE &&//排除函数定义, 也是类型+name
                 ((t) == ts.begin() ||
                 (t-1)->type == CPP_OPEN_BRACE || //以 }结尾
@@ -2782,8 +3155,11 @@ void ParserGroup::extract_global_var_fn() {
                     Function fn;
                     fn.name = t_n->val;
                     fn.ret = *t;
-                    _g_functions.insert(fn);
+                    fn.scope = *cur_scope;
+                    _g_functions[fn.name] = fn;
 
+                    t+=2;
+                    jump_paren(t,ts);
                     ++t;
                     continue;
                 }
@@ -2804,7 +3180,7 @@ void ParserGroup::extract_global_var_fn() {
                     //之前的都是全局变量, 
                     for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
                         (*it_to_be_m)->type = CPP_GLOBAL_VARIABLE;
-                        _g_variable[(*it_to_be_m)->val] = t_type;
+                        _g_variable[(*it_to_be_m)->val] = {(*it_to_be_m)->val, t_type, *cur_scope};
                     }
                 } else {
                     if (t->type == CPP_OPEN_SQUARE) {
@@ -2840,8 +3216,7 @@ void ParserGroup::extract_global_var_fn() {
                 }
             } 
             //全局函数的提取, 寻找 fn(
-            else if (st_brace.empty() && st_paren.empty() && t->type == CPP_NAME && 
-                t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
+            else if (t->type == CPP_NAME && t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
                 //可能是函数
                 //找前一步type
                 auto t_p = t-1;
@@ -2863,7 +3238,12 @@ void ParserGroup::extract_global_var_fn() {
                     Function fn;
                     fn.name = t->val;
                     fn.ret = *t_p;
-                    _g_functions.insert(fn);
+                    fn.scope = *cur_scope;
+                    _g_functions[fn.name] = fn;
+                    ++t;
+                    jump_paren(t,ts);
+                    ++t;
+                    continue;
                 }
             }
             ++t;
@@ -2888,60 +3268,141 @@ void ParserGroup::extract_local_var_fn() {
             continue;
         }
 
-        _local_variable[file_name] = std::map<std::string, Token>();
-        std::map<std::string, Token>& local_variable = _local_variable[file_name]; 
-        _local_functions[file_name] = std::set<Function>();
-        std::set<Function>& local_fn = _local_functions[file_name];
+        std::cout << "extract local var fn: " << file_name << std::endl;
 
         std::deque<Token>& ts = parser._ts;
-        std::stack<Token> st_brace;//作用域最上层
-        std::stack<Token> st_paren;//不在()内,跳过函数参数表
-        //std::cout << "parse global variable from : " << it->first << std::endl;
+        std::deque<Scope> scopes;
+        Scope root_scope;
+        root_scope.type = 0;
+        scopes.push_back(root_scope);
+        Scope* cur_scope = &(scopes.back());
+
+        _local_variable[file_name] = std::map<std::string, Variable>();
+        std::map<std::string, Variable>& local_variable = _local_variable[file_name]; 
+        _local_functions[file_name] = std::map<std::string, Function>();
+        std::map<std::string, Function>& local_fn = _local_functions[file_name];
+
         bool in_annoy = false;
         for (auto t = ts.begin(); t != ts.end(); ) {
-            auto t_n = t+1;
-            auto t_nn = t+2;
-            if (t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN) {
-                st_brace.push(*t);
-            } else if (t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END) {
-                assert(st_brace.top().type == CPP_OPEN_BRACE || st_brace.top().type == CPP_CLASS_BEGIN);
-                st_brace.pop();
-                if (in_annoy && st_brace.empty()) {
-                    in_annoy = false;
-                }
-            } if (t->type == CPP_OPEN_PAREN) {
-                st_paren.push(*t);
-            } else if (t->type == CPP_CLOSE_PAREN) {
-                assert(st_paren.top().type == CPP_OPEN_PAREN);
-                st_paren.pop();
-            } else if(t->val == "template" && t_n->type == CPP_LESS) {
-                //跳过模板参数
-                std::stack<Token> st_angle;//不在<>内, 跳过模板
-                ++t;
-                st_angle.push(*t);
-                ++t;
-                while(!st_angle.empty()) {
-                    if (t->type == CPP_GREATER) {
-                        assert(st_angle.top().type == CPP_LESS);
-                        st_angle.pop();
-                    } else if (t->type == CPP_LESS) {
-                        st_angle.push(*t);
+            if (t->val=="namespace" &&
+                (t+1)!= ts.end() && (t+1)->type == CPP_NAME &&
+                (t+2)!= ts.end() && (t+2)->type == CPP_OPEN_BRACE) {
+                Scope sub;
+                sub.type = 0;
+                sub.name = (t+1)->val;
+                sub.sb.push(*(t+1));
+                sub.father = scopes;
+                for (auto itc = scopes.begin(); itc != scopes.end(); ++itc) {
+                    if (!itc->name.empty()) {
+                        sub.key += itc->name + "::"; 
                     }
+                }
+                sub.key += sub.name;
+                
+                scopes.push_back(sub);
+                cur_scope = &scopes.back();
+                t+=3;
+                continue;
+            } else if (t->val=="namespace" && (t+1)->type == CPP_OPEN_BRACE) {
+                //匿名区域
+                Scope sub;
+                sub.type = 0;
+                sub.name = ANONYMOUS_SCOPE;
+                sub.sb.push(*(t+1));
+                sub.father = scopes;
+                for (auto itc = scopes.begin(); itc != scopes.end(); ++itc) {
+                    if (!itc->name.empty()) {
+                        sub.key += itc->name + "::"; 
+                    }
+                }
+                sub.key += sub.name;
+                
+                scopes.push_back(sub);
+                cur_scope = &scopes.back();
+                t+=2;
+                continue;
+            } else if (t->type == CPP_OPEN_BRACE) {
+                cur_scope->sb.push(*t);
+                ++t;
+                continue;
+            } else if (t->type == CPP_CLOSE_BRACE) {
+                cur_scope->sb.pop();
+                if (!cur_scope->name.empty() && cur_scope->sb.empty()) {
+                    //如果不是默认作用域 则跳出当前作用域
+                    scopes.pop_back();
+                    cur_scope = &scopes.back();
+                }
+                ++t;
+                continue;
+            }
+
+            //跳过class
+            if (t->type == CPP_CLASS_BEGIN) {
+                jump_brace(t, ts);
+                assert(t->type == CPP_CLASS_END);
+                ++t;
+                continue;
+            }
+
+            //跳过成员函数定义
+            if (t->type == CPP_MEMBER_FUNCTION) {
+                while(t->type != CPP_OPEN_BRACE && t->type != CPP_SEMICOLON) {
+                    ++t;
+                }
+                if (t->type == CPP_OPEN_BRACE) {
+                    jump_brace(t, ts);
+                    ++t;
+                    continue;
+                }
+            }
+
+            //提取模板参数
+            std::map<std::string, Token> t_paras; 
+            std::vector<std::string> t_paras_list;
+            if(t->val == "template" && (t+1)->type == CPP_LESS) {
+                ++t;
+                auto t_begin = t;
+                jump_angle_brace(t, ts);
+                parse_tempalte_para(t_begin, t, t_paras, t_paras_list);
+                ++t;
+            } 
+
+            if (t->val == "operator") {
+                t->type = CPP_MEMBER_FUNCTION;
+                if((t+1)->type == CPP_OPEN_PAREN && (t+2)->type == CPP_CLOSE_PAREN) {
+                    t->ts.push_back(*(t+1));
+                    t->ts.push_back(*(t+2));
+                    t++;
+                    t = ts.erase(t);//(
+                    t = ts.erase(t);//)
+                    --t;
+                    //TODO 这里不记录运算符重载函数
+                } else {
+                    //合并到第一个(之前的运算符
+                    auto t_op = t;
+                    ++t;
+                    while(t->type != CPP_OPEN_PAREN) {
+                        t_op->ts.push_back(*t);
+                        t = ts.erase(t);
+                    }
+                    --t;
+                    //TODO 这里不记录运算符重载函数
+                }
+                ++t;
+                assert(t->type == CPP_OPEN_PAREN);
+                jump_paren(t,ts);
+                ++t;
+                if (t->type == CPP_OPEN_BRACE) {
+                    jump_brace(t,ts);
                     ++t;
                 }
                 continue;
-
-            } 
-            else if (st_brace.empty() && t->val == "namespace" && t_n != ts.end() && t_n->type == CPP_OPEN_BRACE) {
-                //匿名函数
-                st_brace.push(*t_n);
-                in_annoy = true;
-                ++t;
-                ++t;    
-                continue;
             }
-            //全局变量的提取
-            else if ((st_brace.empty() || in_annoy) && st_paren.empty() && t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
+
+            auto t_n = t+1;
+            auto t_nn = t+2;
+
+            if (t->type == CPP_TYPE && t_n != ts.end() && t_nn != ts.end() &&
                 t_n->type == CPP_NAME && t_nn->type != CPP_SCOPE &&//排除函数定义, 也是类型+name
                 ((t) == ts.begin() ||
                 (t-1)->type == CPP_COMMENT || //以注释结尾
@@ -2952,6 +3413,8 @@ void ParserGroup::extract_local_var_fn() {
                 (t-1)->val == "static" ||//函数修饰符
                 (t-1)->val == "const" ||//函数修饰符
                 (in_annoy && (t-1)->type==CPP_OPEN_BRACE)) ) { //namespace {后的第一个方程
+
+                std::cout << "may variable: " << t_n->val << std::endl;
                 //有可能是全局变量  也有可能是类外的函数
                 if (t_nn->type == CPP_OPEN_PAREN) {
                     //是类外的函数 
@@ -2961,10 +3424,20 @@ void ParserGroup::extract_local_var_fn() {
                     Function fn;
                     fn.name = t_n->val;
                     fn.ret = *t;
-                    local_fn.insert(fn);
-                    
+                    fn.scope = *cur_scope;
+                    local_fn[fn.name] = fn;
+                    if (fn.name == "get_disk_name") {
+                        std::cout<< "gotit";
+                    }
+
                     ++t;
-                    continue;
+                    jump_paren(t,ts);
+                    ++t;
+                    if (t->type == CPP_OPEN_BRACE) {
+                        jump_brace(t,ts);
+                        ++t;
+                        continue;
+                    }
                 }
 
                 //是全局变量
@@ -2983,7 +3456,7 @@ void ParserGroup::extract_local_var_fn() {
                     //之前的都是全局变量, 
                     for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
                         (*it_to_be_m)->type = CPP_GLOBAL_VARIABLE;
-                        local_variable[(*it_to_be_m)->val] = t_type;
+                        local_variable[(*it_to_be_m)->val] = {(*it_to_be_m)->val, t_type, *cur_scope};
                     }
                 } else {
                     if (t->type == CPP_OPEN_SQUARE) {
@@ -2999,8 +3472,7 @@ void ParserGroup::extract_local_var_fn() {
                 }
             } 
             //全局函数的提取, 寻找 fn(
-            else if ((st_brace.empty()||in_annoy) && st_paren.empty() && t->type == CPP_NAME && 
-                t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
+            else if (t->type == CPP_NAME && t_n != ts.end() && t_n->type == CPP_OPEN_PAREN) {
                 //可能是函数
                 //找前一步type
                 auto t_p = t-1;
@@ -3022,7 +3494,20 @@ void ParserGroup::extract_local_var_fn() {
                     Function fn;
                     fn.name = t->val;
                     fn.ret = *t_p;
-                    local_fn.insert(fn);
+                    fn.scope = *cur_scope;
+                    local_fn[fn.name] = fn;
+                    if (fn.name == "get_disk_name") {
+                        std::cout<< "gotit";
+                    }
+                    ++t;
+                    jump_paren(t,ts);
+                    ++t;
+                    if (t->type == CPP_OPEN_BRACE) {
+                        jump_brace(t,ts);
+                        ++t;
+                        continue;
+                    }
+                    
                 }
             }
             ++t;
@@ -3815,8 +4300,8 @@ void ParserGroup::debug(const std::string& debug_out) {
             return;
         }
         for (auto it = _g_variable.begin(); it != _g_variable.end(); ++it) {
-            out << it->first << " type: ";
-            print_token(it->second, out);
+            out << it->second.scope.key << "::" <<  it->first << " type: ";
+            print_token(it->second.type, out);
             out << std::endl;
         }
         out.close();
@@ -3831,8 +4316,8 @@ void ParserGroup::debug(const std::string& debug_out) {
             return;
         }
         for (auto it_f = _g_functions.begin(); it_f != _g_functions.end(); ++it_f) {
-            out << it_f->name << " ret: ";
-            print_token(it_f->ret, out);
+            out << it_f->second.scope.key << "::" << it_f->first <<  " ret: ";
+            print_token(it_f->second.ret, out);
             out << std::endl;
         }
         out.close();
@@ -3853,7 +4338,7 @@ void ParserGroup::debug(const std::string& debug_out) {
             }
             for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
                 out << "\t" << it2->first << " type: ";
-                print_token(it2->second, out);
+                print_token(it2->second.type, out);
                 out << " \n"; 
             }
         }
@@ -3874,8 +4359,8 @@ void ParserGroup::debug(const std::string& debug_out) {
                 out << "\n";
             }
             for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
-                out << "\t" << (*it2).name << " ret: ";
-                print_token((*it2).ret, out);
+                out << "\t" << it2->first << " ret: ";
+                print_token(it2->second.ret, out);
                 out << " \n"; 
             }
         }
@@ -3989,7 +4474,7 @@ std::map<std::string, Token> ParserGroup::get_template_class_type_paras(std::str
 bool ParserGroup::is_global_variable(const std::string& v_name, Token& t_type) {
     auto it_v = _g_variable.find(v_name);
     if (it_v != _g_variable.end()) {
-        t_type = it_v->second;
+        t_type = it_v->second.type;
         return true;
     }
 
@@ -4001,7 +4486,7 @@ bool ParserGroup::is_local_variable(const std::string& file_name, const std::str
     if(it_vs != _local_variable.end()) {
         auto it_v = it_vs->second.find(v_name);
         if (it_v != it_vs->second.end()) {
-            ret_type = it_v->second;
+            ret_type = it_v->second.type;
             return true;
         }
     }
@@ -4012,9 +4497,9 @@ bool ParserGroup::is_local_variable(const std::string& file_name, const std::str
 bool ParserGroup::is_local_function(const std::string& file_name, const std::string& fn_name, Token& ret_type) {
     auto it_fns = _local_functions.find(file_name);
     if(it_fns != _local_functions.end()) {
-        auto it_fn = it_fns->second.find({fn_name, Token()});
+        auto it_fn = it_fns->second.find(fn_name);
         if (it_fn != it_fns->second.end()) {
-            ret_type = it_fn->ret;
+            ret_type = it_fn->second.ret;
             return true;
         }
     }
@@ -4023,9 +4508,9 @@ bool ParserGroup::is_local_function(const std::string& file_name, const std::str
 }
 
 bool ParserGroup::is_global_function(const std::string& fn_name, Token& ret) {
-    auto it_fn = _g_functions.find({fn_name, Token()});
+    auto it_fn = _g_functions.find(fn_name);
     if (it_fn != _g_functions.end()) {
-        ret = it_fn->ret;
+        ret = it_fn->second.ret;
         return true;
     }
 

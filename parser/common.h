@@ -161,6 +161,12 @@ struct ClassFunction {
     bool is_virtual;
 };
 
+struct Variable {
+    std::string name;
+    Token type;
+    Scope scope;
+};
+
 struct ClassVariable {
     std::string c_name;
     std::string m_name;//member name
@@ -177,28 +183,10 @@ struct Function {
 struct ScopeType {
     std::string scope;
     std::set<std::string> types;
-    std::set<ScopeType> sub_scope;
+    std::map<std::string, ScopeType> sub_scope;
 };
 
-inline bool operator < (const ScopeType& l,  const ScopeType& r) {
-    l.scope < r.scope;
-}
-
-inline bool operator < (const ClassType& l,  const ClassType& r) {
-    l.name < r.name;
-}
-
-inline bool operator < (const ClassFunction& l,  const ClassFunction& r) {
-    l.c_name+"::"+l.fn_name < r.c_name+"::"+r.fn_name;
-}
-
-inline bool operator < (const ClassVariable& l,  const ClassVariable& r) {
-    l.c_name+"::"+l.m_name < r.c_name+"::"+r.m_name;
-}
-
-inline bool operator < (const Function& l,  const Function& r) {
-    l.name < r.name;
-}
+const static std::string ANONYMOUS_SCOPE = "0anonymous_scope0";
 
 static const char* keywords[] = {
 "alignas",
@@ -325,7 +313,9 @@ static const char* types[] = {
 "Uint32",
 "Uint16",
 "Float32",
-"Float64"
+"Float64",
+"__m128",
+"__m128i",
 };
 
 inline std::ostream& operator << (std::ostream& out, const TokenType& t) {

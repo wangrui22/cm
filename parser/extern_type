@@ -1,0 +1,45 @@
+std {
+    string,
+    atomic_int,
+    atomic_bool,
+    ifstream,
+    ofstream,
+    iostream,
+    fstream,
+    sstream,
+
+    chrono {
+        steady_clock {
+            time_point,
+        }
+    }
+};
+
+boost {
+    thread,
+    mutex,
+    condition,
+    unique_lock,
+
+    mutex {
+        scoped_lock,
+    },
+
+    filesystem {
+        directory_iterator,
+        path
+    },
+};
+
+nlohmann {
+    json,
+};
+
+uWS {
+    Hub,
+};
+
+_3th {
+    pid_t,
+    cv_errcode,
+};

@@ -184,11 +184,11 @@ private:
     std::map<std::string, std::vector<ClassVariable>> _g_class_variable;//全局的class的成员变量
     std::set<std::string> _g_enum;//全局的枚举
 
-    std::map<std::string, Token> _g_variable;//全局变量<名称,type_token>
-    std::map<std::string, std::map<std::string, Token>> _local_variable;//局部变量<文件名,<名称,type_token>>
+    std::map<std::string, Variable> _g_variable;//全局变量<名称,type_token>
+    std::map<std::string, std::map<std::string, Variable>> _local_variable;//局部变量<文件名,<名称,type_token>>
 
-    std::set<Function> _g_functions;//全局函数
-    std::map<std::string, std::set<Function>> _local_functions;//cpp的局部函数
+    std::map<std::string, Function> _g_functions;//全局函数
+    std::map<std::string, std::map<std::string, Function>> _local_functions;//cpp的局部函数
 
     //typedef
     std::map<std::string, Token> _typedef_map;//key scope::name
