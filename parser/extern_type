@@ -21,6 +21,17 @@ boost {
     condition,
     unique_lock,
 
+    log {
+        core,
+        sources,
+        expressions,
+        sinks,
+        attributes,
+        keywords,
+        record_view,
+        formatting_ostream,
+    }
+
     mutex {
         scoped_lock,
     },

@@ -149,7 +149,7 @@ private:
         const std::map<std::string, Token>& paras,
         bool is_cpp);
     
-    bool is_call_in_module(std::deque<Token>::iterator& t, 
+    bool is_call_in_module(std::deque<Token>::iterator t, 
         const std::deque<Token>::iterator t_start,  
         const std::string& class_name, 
         const std::string& file_name, 

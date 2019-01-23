@@ -3409,6 +3409,8 @@ void ParserGroup::extract_local_var_fn() {
                 (t-1)->type == CPP_MACRO || //以宏结尾
                 (t-1)->type == CPP_SEMICOLON || //以;结尾,另开一头
                 (t-1)->type == CPP_GREATER || //模板函数
+                (t-1)->type == CPP_CLOSE_BRACE || // }以上一个函数的}结尾
+                (t-1)->type == CPP_OPEN_BRACE || // }以namespace的{结尾
                 (t-1)->val == "inline" ||//函数修饰符
                 (t-1)->val == "static" ||//函数修饰符
                 (t-1)->val == "const" ||//函数修饰符
@@ -3515,6 +3517,7 @@ void ParserGroup::extract_local_var_fn() {
     }
 }
 
+//TODO LABEL 这里只能获取识别为type的参数
 std::map<std::string, Token> ParserGroup::label_skip_paren(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
     std::stack<Token> sbrace;
     assert(t->type == CPP_OPEN_PAREN);
@@ -3912,7 +3915,7 @@ Token ParserGroup::get_subject_type(
 
 }
 // //回溯寻找type是否在分析的代码模块中
-bool ParserGroup::is_call_in_module(std::deque<Token>::iterator& t, 
+bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t, 
     const std::deque<Token>::iterator t_start, 
     const std::string& class_name, 
     const std::string& file_name, 
