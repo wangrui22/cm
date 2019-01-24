@@ -536,6 +536,9 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
         case CPP_MEMBER_VARIABLE:
             out << "member variable: ";
             break;
+        case CPP_CALL:
+            out << "call: ";
+            break;
         default:
             out << "INVALID";
             break;    
