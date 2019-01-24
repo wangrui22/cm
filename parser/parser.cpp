@@ -3579,14 +3579,14 @@ Token ParserGroup::get_auto_type(
     //auto t_begin = t;
     t = t_end-1;
 
-    if (0 == case0) {
-        //auto a = ...;
-        //t_begin += 3;
-    } else {
-        //auto a(...);
-        //t_begin += 3;
-        t--;
-    }
+    // if (0 == case0) {
+    //     //auto a = ...;
+    //     //t_begin += 3;
+    // } else {
+    //     //auto a(...);
+    //     //t_begin += 3;
+    //     t--;
+    // }
 
     return get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);
 }
@@ -3613,7 +3613,7 @@ Token ParserGroup::recall_subjust_type(
     }
 
     //局部变量
-    while (t <= t_start) {
+    while (t > t_start) {
         auto t_p = t-1;
         auto t_n = t+1;
         auto t_nn = t+2;
@@ -3624,12 +3624,12 @@ Token ParserGroup::recall_subjust_type(
                 --t_p;
             }
 
-            if (t_p->type == CPP_TYPE) {
-                return *t_p;
-            } else if (t_p->val == "auto") {
+            if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cout << "get type auto.\n";
                 return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 1);
+            } else if (t_p->type == CPP_TYPE) {
+                return *t_p;
             } else {
                 std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
                 Token tt;
@@ -3643,12 +3643,12 @@ Token ParserGroup::recall_subjust_type(
                 --t_p;
             }
 
-            if (t_p->type == CPP_TYPE) {
-                return *t_p;
-            } else if (t_p->val == "auto") {
+            if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cout << "get type auto.\n";
                 return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 2);
+            } else if (t_p->type == CPP_TYPE) {
+                return *t_p;
             } else {
                 std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
                 Token tt;
@@ -3661,14 +3661,14 @@ Token ParserGroup::recall_subjust_type(
                 --t_p;
             }
 
-            if (t_p->type == CPP_TYPE) {
-                return *t_p;
-            } else if (t_p->val == "auto") {
+            if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cerr << "dont support auto it;\n";
                 Token tt;
                 tt.type = CPP_OTHER;
                 return tt;
+            } else if (t_p->type == CPP_TYPE) {
+                return *t_p;
             } else {
                 std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
                 Token tt;
@@ -3707,14 +3707,45 @@ Token ParserGroup::recall_subjust_type(
 
 static void jump_before_square(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
     assert(t->type == CPP_CLOSE_SQUARE);
-    while (t->type == CPP_OPEN_SQUARE && t>=t_start) {
+    std::stack<Token> ts;
+    ts.push(*t);
+    --t;
+    while (!ts.empty()&& t>=t_start) {
+        if(t->type == CPP_OPEN_SQUARE) {
+            ts.pop();
+        } else if (t->type == CPP_CLOSE_SQUARE) {
+            ts.push(*t);
+        }
         --t;
     }
 }
 
 static void jump_before_praen(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
     assert(t->type == CPP_CLOSE_PAREN);
-    while (t->type == CPP_OPEN_PAREN && t>=t_start) {
+    std::stack<Token> ts;
+    ts.push(*t);
+    --t;
+    while (!ts.empty() && t>=t_start) {
+        if(t->type == CPP_OPEN_PAREN) {
+            ts.pop();
+        } else if (t->type == CPP_CLOSE_PAREN) {
+            ts.push(*t);
+        }
+        --t;
+    }
+}
+
+static void jump_before_angle_brace(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
+    assert(t->type == CPP_GREATER);
+    std::stack<Token> ts;
+    ts.push(*t);
+    --t;
+    while (!ts.empty() && t>=t_start) {
+        if(t->type == CPP_LESS) {
+            ts.pop();
+        } else if (t->type == CPP_GREATER) {
+            ts.push(*t);
+        }
         --t;
     }
 }
@@ -3772,7 +3803,7 @@ Token ParserGroup::get_fn_ret_type(
         --t;
         //继续寻找主语类型
 
-        Token tt = get_subject_type(t, t, class_name, file_name, paras, is_cpp);
+        Token tt = get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);
         if (tt.type == CPP_OTHER) {
             return tt;
         }
@@ -3891,13 +3922,35 @@ Token ParserGroup::get_subject_type(
         //可能用括号隔离了一个类型 或者 是另一个函数调用
         auto t_r = t;
         jump_before_praen(t_r, t_start);
-        assert(t_r->type == CPP_OPEN_PAREN);
-        auto t_p = t_r -1;
-        if (t_p->type == CPP_NAME) {
+        //assert(t_r->type == CPP_OPEN_PAREN);
+        if (t_r->type == CPP_NAME) {
             //函数调用
             Token tt = get_fn_ret_type(t_p, t_start, class_name, file_name, paras, is_cpp);
             return tt;
-        } 
+        } else if (t_r->type == CPP_GREATER) {
+            //可能是模板函数, 获取<>中的内容以及模板函数的方法
+            Token t_paras = *(t_r-1);
+            jump_before_angle_brace(t_r, t_start);
+            if (t_r->type == CPP_NAME) {
+                //是模板函数
+                if ((t_r->val == "static_cast" ||
+                    t_r->val == "dynamic_cast" ||
+                    t_r->val == "const_cast" ||
+                    t_r->val == "dynamic_pointer_cast") && t_paras.type == CPP_TYPE) {
+                    return t_paras;
+                } else {
+                    std::cout << "cant handle template fn call: " << t_r->val << std::endl;
+                    Token tt;
+                    tt.type = CPP_OTHER;
+                    return tt;
+                }
+            } else {
+                std::cout << "unknow syntax: " << t_r->val << std::endl;
+                Token tt;
+                tt.type = CPP_OTHER;
+                return tt;
+            }
+        }
         //else if (t_p->type == CPP_MULT){}//TODO 解引用要分析吗?
         else {
             //存萃的类型，则分析括号内部的内容
@@ -3973,7 +4026,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
 
         std::cout << "begin to find subject's type\n";
 
-        Token t_type = get_subject_type(t, t, class_name, file_name, paras, is_cpp);
+        Token t_type = get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);
         std::cout  << class_name << "::" << fn_name << " called by " << t->val << " 's type: ";
         print_token(t_type, std::cout);
         std::cout << std::endl;
