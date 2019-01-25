@@ -309,7 +309,7 @@ static inline Token lex_string(char c , Reader* cpp_reader, Token& token, int pe
     }
 }
 
-Parser::Parser(bool to_be_confuse):_to_be_confuse(to_be_confuse) {
+Parser::Parser() {
 
 }
 
@@ -823,9 +823,10 @@ ParserGroup::~ParserGroup() {
 
 }
 
-void ParserGroup::add_parser(const std::string& file_name, Parser* parser, Reader* reader) {
+void ParserGroup::add_parser(const std::string& file_name, const std::string& file_path, Parser* parser, Reader* reader) {
 
     _file_name.push_back(file_name);
+    _file_path.push_back(file_path);
     _parsers.push_back(parser);
     _readers.push_back(reader);
 }
@@ -1785,13 +1786,22 @@ void ParserGroup::extract_class() {
 
     //分析class的继承关系
     bool steady = false;
+    
+    {
+        Scope scope;
+        std::map<std::string, Token> tm_paras;
+        std::vector<std::string> tm_paras_list;
+        _g_class[THIRD_CLASS] = {THIRD_CLASS, false, false, "", scope, tm_paras, tm_paras_list};
+        _g_class_fn[THIRD_CLASS] = std::vector<ClassFunction>();
+        _g_class_variable[THIRD_CLASS] = std::vector<ClassVariable>();
+    }
     while(!steady) {
         steady = true;
         for (auto it_c = _g_class.begin(); it_c != _g_class.end(); ++it_c) {
-        if (!it_c->second.father.empty() && it_c->second.father != "3th" && _g_class.find(it_c->second.father) == _g_class.end()) {
+        if (!it_c->second.father.empty() && it_c->second.father != THIRD_CLASS && _g_class.find(it_c->second.father) == _g_class.end()) {
                 //LABEL 继承自三方库， 虚函数不能混淆
                 ClassType new_c = it_c->second;
-                new_c.father = "3th";
+                new_c.father = THIRD_CLASS;
                 _g_class.erase(it_c);
                 _g_class[new_c.name] = new_c;
                 steady = false;
@@ -1920,11 +1930,17 @@ void ParserGroup::extract_typedef() {
                     //TODO LABEL 目前不能分辨不同域的typedef
                     //比较typedef内容
                     auto it_old = _typedef_map.find(t->val);
-                    assert(it_old->second.ts.size()==td.ts.size());
+                    if (it_old->second.ts.size()!=td.ts.size()) {
+                        std::cerr << "cant handle different typedef: " << it_old->first << std::endl;
+                        assert(false);
+                    }
                     auto it0 = it_old->second.ts.begin();
                     auto it1 = td.ts.begin();
                     for (;it1 != td.ts.end(); ++it0,++it1) {
-                        assert(it1->val == it0->val);
+                        if (it1->val != it0->val) {
+                            std::cerr << "cant handle different typedef: " << it_old->first << std::endl;
+                            assert(false);
+                        }
                     }
                 } else {
                     _typedef_map[t->val] = td;
@@ -1991,6 +2007,39 @@ void ParserGroup::extract_typedef() {
     }
 }
 
+void ParserGroup::extract_decltype() {
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *(*it);
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            if (t->val == "decltype") {
+                assert((t+1)->type == CPP_OPEN_PAREN);
+                ++t;
+                std::stack<Token> sp;
+                std::deque<Token> tt;
+                tt.push_back(*t);
+                sp.push(*t);
+                t = ts.erase(t);
+                while(!sp.empty()) {
+                    tt.push_back(*t);
+                    if (t->type == CPP_OPEN_PAREN) {
+                        sp.push(*t);
+                    } else if (t->type == CPP_CLOSE_PAREN) {
+                        sp.pop();
+                    }
+                    t = ts.erase(t);
+                }
+                --t;
+                t->ts = tt;
+                t->type = CPP_TYPE;
+                ++t;
+            } else {
+                ++t;
+            }
+        }
+    }
+}
+
 void ParserGroup::extract_container() {
     //TODO typedef已经连接了可能存在的container,需要重新分析
 
@@ -2020,7 +2069,7 @@ void ParserGroup::extract_container() {
     std_container.insert("shared_ptr");
     std_container.insert("weak_ptr");
     std_container.insert("unique_ptr");
-    std_container.insert("function");
+    //std_container.insert("function"); //TODO LABEL 不处理function, 对label应该没有影响
 
     std::string ns = "std"; 
 
@@ -2029,6 +2078,9 @@ void ParserGroup::extract_container() {
         Parser& parser = *(*it);
         std::string file_name = _file_name[idx++];
         std::cout << "extract container: " << file_name << std::endl;
+        if (file_name== "mi_device_store.cpp") {
+            std::cout << "gotit";
+        }
         std::deque<Token>& ts = parser._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto t_n = t+1;//::
@@ -2038,6 +2090,9 @@ void ParserGroup::extract_container() {
             if (t->val == ns && t_n != ts.end() && t_nn != ts.end() && t_nnn != ts.end() &&
                 t_n->type == CPP_SCOPE && std_container.find(t_nn->val) != std_container.end() && t_nnn->type == CPP_LESS) {
                 //找到std的源头, 第一个容器
+                if (t_nn->val == "map") {
+                    std::cout << "gotit";
+                }
                 std::stack<Token*> stt;//stack token type
                 std::stack<Token> st_scope; //<>
                 
@@ -2764,7 +2819,7 @@ void ParserGroup::extract_extern_type() {
     // }
 }
 
-void ParserGroup::combine_type_with_multi_and() {
+void ParserGroup::combine_type_with_multi_and_rm_const() {
     //extract class member & function ret
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
@@ -2773,6 +2828,11 @@ void ParserGroup::combine_type_with_multi_and() {
         for (auto t = ts.begin(); t != ts.end(); ) {    
             //conbine type with * &
             if (t->type == CPP_TYPE) {
+                if ((t-1)->val == "const") {
+                    //去除const
+                    --t;
+                    t = ts.erase(t);
+                }
                 auto t_n = t+1;
                 if (t_n!=ts.end() && (t_n->type == CPP_MULT || t_n->type == CPP_AND)) {
                     t->ts.push_back(*t_n);
@@ -3279,6 +3339,9 @@ void ParserGroup::extract_local_var_fn() {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         std::string file_name = _file_name[file_idx++];
+        if (file_name == "mi_db_server_main.cpp") {
+            std::cout <<"got";
+        }
         bool is_cpp = false;
         if (file_name.size() > 2 && file_name.substr(file_name.size()-4, 5) == ".cpp") {
             is_cpp = true;
@@ -3438,8 +3501,11 @@ void ParserGroup::extract_local_var_fn() {
                 (in_annoy && (t-1)->type==CPP_OPEN_BRACE)) ) { //namespace {后的第一个方程
 
                 std::cout << "may variable: " << t_n->val << std::endl;
+                if (t_n->val == "calculate_raw_image_buffer") {
+                    std::cout << "got";
+                }
                 //有可能是全局变量  也有可能是类外的函数
-                if (t_nn->type == CPP_OPEN_PAREN) {
+                if (t_nn->type == CPP_OPEN_PAREN && (t_nn+1)->val != "new") {//排除 A a(new A);的情况
                     //是类外的函数 
                     //如果是h文件中的,则作为全局函数, 如果是cpp中的则作为局部函数
                     t_n->type = CPP_FUNCTION;
@@ -3457,7 +3523,12 @@ void ParserGroup::extract_local_var_fn() {
                     jump_paren(t,ts);
                     ++t;
                     if (t->type == CPP_OPEN_BRACE) {
+                        //函数定义
                         jump_brace(t,ts);
+                        ++t;
+                        continue;
+                    } else if (t->type == CPP_SEMICOLON) {
+                        //函数声明
                         ++t;
                         continue;
                     }
@@ -3475,7 +3546,7 @@ void ParserGroup::extract_local_var_fn() {
                 }
         CHECK_GLOBAL_VARIABLE_END:
                 //LABEL这里和成员变量不一样, 全局变量可以直接声明或者定义
-                if (t->type == CPP_SEMICOLON || t->type == CPP_EQ )  {
+                if (t->type == CPP_SEMICOLON || t->type == CPP_EQ || (t->type == CPP_OPEN_PAREN && (t+1)->val == "new"))  {
                     //之前的都是全局变量, 
                     for (auto it_to_be_m=to_be_m.begin(); it_to_be_m!=to_be_m.end(); ++it_to_be_m) {
                         (*it_to_be_m)->type = CPP_GLOBAL_VARIABLE;
@@ -3996,6 +4067,11 @@ Token ParserGroup::get_subject_type(
             //函数调用
             Token tt = get_fn_ret_type(t_r, t_start, class_name, file_name, paras, is_cpp);
             return tt;
+        } else if (t_r->val == "typeid") {
+            //typeid的返回不重要
+            Token tt;
+            tt.type = CPP_OTHER;
+            return tt;
         } else if (t_r->type == CPP_GREATER) {
             //可能是模板函数, 获取<>中的内容以及模板函数的方法
             Token t_paras = *(t_r-1);
@@ -4123,7 +4199,20 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
         bool tm = false;
         if (is_in_class_struct(t_type.val, tm)) {
             fn_subject_type = t_type;
-            return true;
+            if (tm) {
+               return false; 
+            } else {
+                //get class base
+                auto c_bases = _g_class_bases.find(t_type.val);
+                if (c_bases != _g_class_bases.end()) {
+                    for (auto it = c_bases->second.begin(); it != c_bases->second.end(); ++it) {
+                        if (it->first == THIRD_CLASS) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
         } else {
             return false;
         }
@@ -4144,7 +4233,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "process_event_loop") {
+            if(t->val == "name") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4262,8 +4351,8 @@ void ParserGroup::debug(const std::string& debug_out) {
     size_t i=0;
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
-        const std::string& file_name = _file_name[i++];
-        const std::string f = debug_out+"/"+file_name+".l1";
+        const std::string& file_name = _file_path[i++];
+        const std::string f = file_name +".l1";
         std::cout << "print file token: " << file_name << std::endl;
         std::ofstream out(f, std::ios::out);
         if (!out.is_open()) {

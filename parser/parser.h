@@ -36,7 +36,7 @@ class Parser {
 public: 
     friend class ParserGroup;
 
-    Parser(bool to_be_confuse=false);
+    Parser();
     ~Parser();
 
     Token lex(Reader* cpp_reader);
@@ -49,7 +49,6 @@ public:
 
 private:
     std::deque<Token> _ts;
-    bool _to_be_confuse;
 };
 
 
@@ -58,7 +57,7 @@ public:
     ParserGroup();
     ~ParserGroup();
 
-    void add_parser(const std::string& file_name, Parser* parser, Reader* reader);
+    void add_parser(const std::string& file_name, const std::string& file_path, Parser* parser, Reader* reader);
     Parser* get_parser(const std::string& file_name);
 
     //按顺序调用
@@ -67,8 +66,9 @@ public:
     void extract_extern_type();
     void extract_class();
     void extract_typedef();
+    void extract_decltype();
     void extract_container();
-    void combine_type_with_multi_and();
+    void combine_type_with_multi_and_rm_const();
     void extract_class2();
     void extract_global_var_fn();
     void extract_local_var_fn();
@@ -172,6 +172,7 @@ private:
         std::vector<std::string>& paras_list);
 private:
     std::vector<std::string> _file_name;
+    std::vector<std::string> _file_path;
     std::vector<Parser*> _parsers;
     std::vector<Reader*> _readers;
 

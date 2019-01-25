@@ -187,6 +187,7 @@ struct ScopeType {
 };
 
 const static std::string ANONYMOUS_SCOPE = "0anonymous_scope0";
+const static std::string THIRD_CLASS = "3th";
 
 static const char* keywords[] = {
 "alignas",
