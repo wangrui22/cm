@@ -4340,6 +4340,46 @@ void ParserGroup::label_call()  {
     }
 }
 
+void ParserGroup::replace_call() {
+    //替换的内容
+    //所有的class名称, 所有的非模板类成员函数, 全局/局部函数, 所有的call, 
+    int file_idx=0;
+    const std::string REPLACE = "_replace";
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *(*it);
+        const std::string file_name = _file_name[file_idx++];
+        const std::string file_path = _file_path[file_idx];
+
+        std::cout << "replace file: " << file_name << std::endl;
+
+        std::ifstream in(file_path, std::ios::in);
+        if (!in.is_open()) {
+            std::cerr << "read file: " << file_path << " 's code failed.\n";
+            continue;
+        }
+
+        std::stringstream ss;
+        ss << in.rdbuf();
+        std::string code = ss.str();
+        in.close();
+
+        std::deque<Token>& ts = parser._ts;
+        int loc_sum = 0;
+        for (auto t = ts.begin(); t != ts.end(); ++t) {
+            if (t->type == CPP_CALL) { 
+                int loc = t->loc;
+                int len = t->val.size();
+                code.insert(loc+len+loc_sum, REPLACE);
+                loc_sum += REPLACE.length();
+            }
+        }
+
+        std::ofstream out(file_path, std::ios::out);
+        out << code;
+        out.close();         
+    }
+}
+
 static inline void print_token(const Token& t, std::ostream& out) {
     out << t.val << " ";
     for (auto it2 = t.ts.begin(); it2 != t.ts.end(); ++it2) {

@@ -74,6 +74,7 @@ public:
     void extract_local_var_fn();
 
     void label_call();
+    void replace_call();
 
     void debug(const std::string& debug_out);
 
