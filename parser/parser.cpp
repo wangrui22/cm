@@ -5,6 +5,7 @@
 #include <cassert>
 #include <stack>
 #include <functional>
+#include <algorithm>
 
 static inline void print_token(const Token& t, std::ostream& out);
 
@@ -315,6 +316,14 @@ Parser::Parser() {
 
 Parser::~Parser() {
 
+}
+
+void Parser::set_reader(Reader* reader) {
+    _reader = reader;
+}
+
+void Parser::stage_token() {
+    _stage_ts = _ts;
 }
 
 Token Parser::lex(Reader* cpp_reader) {
@@ -1489,8 +1498,9 @@ void ParserGroup::extract_class(
             if (t->val == cur_c_name && (t-1)->type == CPP_COMPL) {
                 //析构函数
                 t->type = CPP_MEMBER_FUNCTION;
-                t->val = "~"+t->val;
+                //t->val = "~"+t->val;
                 t->subject = cur_c_name;
+                t->ts.push_back(*(t-1));
                 class_fn.push_back({access, cur_c_name, t->val, std::deque<Token>(), Token()});
 
                 //删除 ~
@@ -1582,6 +1592,7 @@ void ParserGroup::extract_class(
             } else if(t->val == "operator") {
                 //运算符重载函数
                 t->type = CPP_MEMBER_FUNCTION;
+                t->subject = cur_c_name;
                 if((t+1)->type == CPP_OPEN_PAREN && (t+2)->type == CPP_CLOSE_PAREN) {
                     t->ts.push_back(*(t+1));
                     t->ts.push_back(*(t+2));
@@ -3059,8 +3070,10 @@ void ParserGroup::extract_class2() {
                 bool tm=false;
                 if (t_n->val == (t_nnn+1)->val && is_in_class_struct(t_n->val, tm)) {
                     t = t_nnn+1;
-                    t->val = "~"+t->val;
+                    //t->val = "~"+t->val;
                     t->type = CPP_MEMBER_FUNCTION;
+                    t->subject = t_n->val;
+                    t->ts.push_back(*(t-1));
                     --t;
                     t = ts.erase(t);
                 }
@@ -3183,7 +3196,7 @@ void ParserGroup::extract_global_var_fn() {
 
             //全局运算符重载函数
             if (t->val == "operator") {
-                t->type = CPP_MEMBER_FUNCTION;
+                t->type = CPP_FUNCTION;
                 if((t+1)->type == CPP_OPEN_PAREN && (t+2)->type == CPP_CLOSE_PAREN) {
                     t->ts.push_back(*(t+1));
                     t->ts.push_back(*(t+2));
@@ -3452,7 +3465,7 @@ void ParserGroup::extract_local_var_fn() {
             } 
 
             if (t->val == "operator") {
-                t->type = CPP_MEMBER_FUNCTION;
+                t->type = CPP_FUNCTION;
                 if((t+1)->type == CPP_OPEN_PAREN && (t+2)->type == CPP_CLOSE_PAREN) {
                     t->ts.push_back(*(t+1));
                     t->ts.push_back(*(t+2));
@@ -4343,40 +4356,68 @@ void ParserGroup::label_call()  {
 void ParserGroup::replace_call() {
     //替换的内容
     //所有的class名称, 所有的非模板类成员函数, 全局/局部函数, 所有的call, 
+
     int file_idx=0;
     const std::string REPLACE = "_replace";
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
-        const std::string file_name = _file_name[file_idx++];
+        const std::string file_name = _file_name[file_idx];
         const std::string file_path = _file_path[file_idx];
-
+        ++file_idx;
         std::cout << "replace file: " << file_name << std::endl;
+        std::deque<Token> to_be_replace;
+        
+        //1 把整合过的token中非模板类的member fn 以及局部和全局方程 以及 call 抽取出来
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ++t) {
+            if (t->type == CPP_CALL ||
+                t->type == CPP_FUNCTION) { 
+                to_be_replace.push_back(*t);
+            } else if (t->type == CPP_MEMBER_FUNCTION && t->val != "operator") {
+                assert(!t->subject.empty());
+                bool tm=false;
+                if (is_in_class_struct(t->subject, tm) && !tm) {
+                    to_be_replace.push_back(*t);
+                }
+            }
+        }
 
-        std::ifstream in(file_path, std::ios::in);
-        if (!in.is_open()) {
-            std::cerr << "read file: " << file_path << " 's code failed.\n";
+        //2 生成原始token 并把非模板类的class名称全抽取出来
+        std::deque<Token>& stage_ts = parser._stage_ts;
+        for (auto t = stage_ts.begin(); t != stage_ts.end(); ++t) {
+            bool tm = false;
+            if (t->type == CPP_NAME && is_in_class_struct(t->val, tm) && !tm) {
+                to_be_replace.push_back(*t);
+            }
+        }
+
+        if (to_be_replace.empty()) {
             continue;
         }
 
-        std::stringstream ss;
-        ss << in.rdbuf();
-        std::string code = ss.str();
-        in.close();
-
-        std::deque<Token>& ts = parser._ts;
+        //3 对这些loc进行排序，然后按loc从小到大替换
+        std::sort(to_be_replace.begin(), to_be_replace.end(), [](Token& l, Token& r) {
+            return l.loc < r.loc;
+        });
+        
+        ///4 替换
         int loc_sum = 0;
-        for (auto t = ts.begin(); t != ts.end(); ++t) {
-            if (t->type == CPP_CALL) { 
-                int loc = t->loc;
-                int len = t->val.size();
-                code.insert(loc+len+loc_sum, REPLACE);
-                loc_sum += REPLACE.length();
+        std::string code = parser._reader->_file_str;
+        int last_loc = -1;
+        for (auto t = to_be_replace.begin(); t != to_be_replace.end(); ++t) {
+            int loc = t->loc;
+            int len = t->val.size();
+            if (last_loc == loc) {
+                continue;//去掉重复替换的部分如析构函数这种
             }
+            last_loc = loc;
+            code.insert(loc+len+loc_sum-1, REPLACE);
+            loc_sum += REPLACE.length();
         }
 
         std::ofstream out(file_path, std::ios::out);
         out << code;
-        out.close();         
+        out.close();
     }
 }
 

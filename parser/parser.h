@@ -25,7 +25,7 @@ public:
     std::string get_string(int loc, int len);
     void skip_white();
 
-private:
+public:
     std::string _file_str;
     std::string _file_path;
     int _cur_line;
@@ -39,6 +39,9 @@ public:
     Parser();
     ~Parser();
 
+    void set_reader(Reader* reader);
+    void stage_token();
+
     Token lex(Reader* cpp_reader);
     void push_token(const Token& t);
     const std::deque<Token>& get_tokens() const;
@@ -49,6 +52,8 @@ public:
 
 private:
     std::deque<Token> _ts;
+    std::deque<Token> _stage_ts;
+    Reader* _reader;
 };
 
 

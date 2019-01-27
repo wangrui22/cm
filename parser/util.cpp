@@ -99,3 +99,7 @@ std::string Util::get_file_name(const std::string& path) {
     boost::filesystem::path p(path);    
     return p.filename().string();
 }
+
+bool Util::is_direction(const std::string& path) {
+    return boost::filesystem::is_directory(path);
+}

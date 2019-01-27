@@ -69,18 +69,23 @@ int main(int argc, char* argv[]) {
 
         std::cout << "parse direction: " << src_dir[j] << "\n";
 
-        std::set<std::string> post;
-        post.insert(".h");
-        post.insert(".hpp");
-        post.insert(".inl");
-
         std::vector<std::string> h_file;
-        Util::get_all_file_recursion(src_dir[j], post,  h_file);
-
-        std::set<std::string> post2;
-        post2.insert(".cpp");
         std::vector<std::string> c_file;
-        Util::get_all_file_recursion(src_dir[j], post2,  c_file);
+
+        if (!Util::is_direction(src_dir[j])) {
+            h_file.push_back(src_dir[j]);
+        } else {
+            std::set<std::string> post;
+            post.insert(".h");
+            post.insert(".hpp");
+            post.insert(".inl");
+            Util::get_all_file_recursion(src_dir[j], post,  h_file);
+
+            std::set<std::string> post2;
+            post2.insert(".cpp");
+        
+            Util::get_all_file_recursion(src_dir[j], post2,  c_file);
+        }
 
         for (size_t i=0; i<h_file.size(); ++i) {
             std::cout << "lex file: " << h_file[i] << "\n";
@@ -93,6 +98,7 @@ int main(int argc, char* argv[]) {
             Reader* reader = new Reader();
             reader->read(h_file[i]);
             Parser* parser = new Parser();
+            parser->set_reader(reader);
             while(true) {
                 parser->push_token(parser->lex(reader));
                 if (reader->eof()) {
@@ -100,6 +106,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
+            parser->stage_token();
             parser->f1();
             parser->f2();
 
@@ -119,6 +126,7 @@ int main(int argc, char* argv[]) {
             Reader* reader = new Reader();
             reader->read(c_file[i]);
             Parser* parser = new Parser();
+            parser->set_reader(reader);
 
             while(true) {
                 parser->push_token(parser->lex(reader));
@@ -126,6 +134,8 @@ int main(int argc, char* argv[]) {
                     break;
                 }
             }
+
+            parser->stage_token();
 
             parser->f1();
             parser->f2();
