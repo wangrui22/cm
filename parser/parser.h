@@ -79,6 +79,7 @@ public:
     void extract_local_var_fn();
 
     void label_call();
+    void label_fn_as_parameter();
     void replace_call();
 
     void debug(const std::string& debug_out);
@@ -140,6 +141,14 @@ private:
         bool is_cpp);
 
     Token get_subject_type(
+        std::deque<Token>::iterator& t, 
+        const std::deque<Token>::iterator t_start, 
+        const std::string& class_name, 
+        const std::string& file_name, 
+        const std::map<std::string, Token>& paras,
+        bool is_cpp);
+
+    Token get_close_subject_type(
         std::deque<Token>::iterator& t, 
         const std::deque<Token>::iterator t_start, 
         const std::string& class_name, 

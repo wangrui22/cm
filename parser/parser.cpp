@@ -1135,6 +1135,28 @@ static inline void jump_paren(std::deque<Token>::iterator& t, const std::deque<T
     }
 };
 
+static inline void jump_paren(std::deque<Token>::iterator& t) {
+    std::stack<Token> s_de;
+    assert(t->type == CPP_OPEN_PAREN);
+    s_de.push(*t);
+    // )
+    ++t;
+    while (!s_de.empty()) {
+        if (t->type == CPP_CLOSE_PAREN) {
+            s_de.pop();
+            if (s_de.empty()) {
+                continue;
+            }
+            ++t;
+        } else if (t->type == CPP_OPEN_PAREN) {
+            s_de.push(*t);
+            ++t;
+        } else {
+            ++t;
+        }
+    }
+};
+
 void ParserGroup::parse_tempalte_para(
     std::deque<Token>::iterator t_begin, 
     std::deque<Token>::iterator t_end,
@@ -3970,6 +3992,22 @@ Token ParserGroup::get_fn_ret_type(
     }
 }
 
+Token ParserGroup::get_close_subject_type(
+        std::deque<Token>::iterator& t, 
+        const std::deque<Token>::iterator t_start, 
+        const std::string& class_name, 
+        const std::string& file_name, 
+        const std::map<std::string, Token>& paras,
+        bool is_cpp) {
+    assert(t->type == CPP_OPEN_PAREN);
+    jump_paren(t);
+    assert(t->type == CPP_CLOSE_PAREN);
+    --t;
+    //封闭式的类型分析, 从尾到头分析(主要分析最后一个元素)
+    //TODO 这里忽略运算符重载（默认运算符重载会返回相同的类型)
+    return get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);    
+}
+
 Token ParserGroup::get_subject_type(
     std::deque<Token>::iterator& t, 
     const std::deque<Token>::iterator t_start, 
@@ -4112,8 +4150,8 @@ Token ParserGroup::get_subject_type(
         //else if (t_p->type == CPP_MULT){}//TODO 解引用要分析吗?
         else {
             //存萃的类型，则分析括号内部的内容
-            t_r = t-1;
-            Token tt = get_subject_type(t_r, t_start, class_name, file_name, paras, is_cpp);
+            ++t_r;//(
+            Token tt = get_close_subject_type(t_r, t_start, class_name, file_name, paras, is_cpp);
             return tt;
         }
     } else if (t->type == CPP_NAME) {
@@ -4246,7 +4284,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "name") {
+            if(t->val == "magnitude") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4284,6 +4322,9 @@ void ParserGroup::label_call()  {
         } 
 
         std::cout << "label file: " << file_name << std::endl;
+        if (file_name == "mi_roi_statistician.inl") {
+            std::cout << "gotit";
+        }
         std::deque<Token>& ts = parser._ts;        
 
         for (auto t = ts.begin(); t != ts.end(); ) {
@@ -4351,6 +4392,36 @@ void ParserGroup::label_call()  {
             }
         }
     }
+}
+
+void ParserGroup::label_fn_as_parameter() {
+    int file_idx=0;
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *(*it);
+        const std::string file_name = _file_name[file_idx++];
+        bool is_cpp = false;
+        if (file_name.size() > 2 && file_name.substr(file_name.size()-4, 5) == ".cpp") {
+            is_cpp = true;
+        }
+        std::cout << "label fn as paramerter file: " << file_name << std::endl; 
+
+        std::deque<Token>& ts = parser._ts; 
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            if (t->type == CPP_NAME) {
+                if (t->val == "file_formatter") {
+                    std::cout << "gotit";
+                }
+                Token ret;
+                if (is_global_function(t->val,ret)) {
+                    t->type = CPP_CALL;
+                } else if (is_cpp && is_local_function(file_name, t->val , ret)) {
+                    t->type = CPP_CALL;
+                }
+            }
+            ++t;
+        }
+    }
+
 }
 
 void ParserGroup::replace_call() {
