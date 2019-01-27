@@ -3959,25 +3959,29 @@ Token ParserGroup::get_fn_ret_type(
         }
 
         //看是否是迭代器或者容器
-        if (ret.val == "iterator" || ret.val == "const_iterator") {
+        if (tt.val == "iterator" || tt.val == "const_iterator") {
             //可能不会是键值对类型
             assert(!tt.ts.empty());
             assert(!tt.ts[0].ts.empty());
             if (is_member_function(tt.ts[0].ts[0].val, fn_name, ret)) {
                 return ret;
+            } else {
+                Token t_o;
+                t_o.type == CPP_OTHER;
+                return t_o;
             }
-        } else if (is_stl_container(ret.val)) {
+        } else if (is_stl_container(tt.val)) {
             //是容器
             std::cout << "contaier " << tt.val << " 's function: " << fn_name << " called \n";
             if (is_stl_container_ret_iterator(fn_name)) {
                 Token ret0;
                 ret0.type = CPP_TYPE;
                 ret0.val = "iterator";
-                ret0.ts.push_back(ret);
+                ret0.ts.push_back(tt);
                 return ret0;
             } else if (is_stl_container_ret_val(fn_name)) {
-                assert(!ret.ts.empty());
-                return ret.ts[0];
+                assert(!tt.ts.empty());
+                return tt.ts[0];
             } else {
                 Token t_o;
                 t_o.type == CPP_OTHER;
@@ -4042,12 +4046,14 @@ Token ParserGroup::get_subject_type(
             }
         } else if (tt.val == "iterator" || tt.val == "const_iterator") {
             //迭代器
+            //TODOTODOTODO 这里需要调试
             assert(!tt.ts.empty());
-            assert(tt.ts[0].ts.size() ==2);
-            if (t->val == "first") {
-                return tt.ts[0].ts[0];
-            } else {
+            if (t->val == "second") {
+                assert(tt.ts[0].ts.size() == 2);
                 return tt.ts[0].ts[1];
+            } else {//有可能是first 或者 其他的容器
+                assert(!tt.ts[0].ts.empty());
+                return tt.ts[0].ts[0];
             }
         } else {
             //t->val 是 tt的成员
@@ -4231,6 +4237,14 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
             std::cout << "get invalid subject type.";
             return false;
         }
+        
+        //分析是不是迭代器
+        if (t_type.val == "iterator" || t_type.val == "const_iterator") {
+            assert(!t_type.ts.empty());
+            assert(!t_type.ts[0].ts.empty());
+            Token t_tmp = t_type.ts[0].ts[0];
+            t_type = t_tmp;
+        }
 
         //这里要分析是不是容器
         if (is_stl_container(t_type.val)) {
@@ -4245,7 +4259,9 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
                 //assert(false);
                 return false;
             }
-        }
+        } 
+
+        
 
         bool tm = false;
         if (is_in_class_struct(t_type.val, tm)) {
@@ -4284,7 +4300,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "magnitude") {
+            if(t->val == "findAndGetOFString") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4408,9 +4424,6 @@ void ParserGroup::label_fn_as_parameter() {
         std::deque<Token>& ts = parser._ts; 
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->type == CPP_NAME) {
-                if (t->val == "file_formatter") {
-                    std::cout << "gotit";
-                }
                 Token ret;
                 if (is_global_function(t->val,ret)) {
                     t->type = CPP_CALL;
