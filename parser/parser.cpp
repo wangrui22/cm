@@ -2232,11 +2232,25 @@ void ParserGroup::extract_container() {
                         ++step;
                         continue;
                     } else if (t->type == CPP_SCOPE) {
-                        //指针
-                        cur_scope->ts.push_back(*t);
-                        ++t;
-                        ++step;
-                        continue;
+                        //域或者迭代器
+                        if ((t+1)->val == "iterator" || (t+1)->val == "const_iterator") {
+                            //迭代器
+                            assert(cur_scope->ts.size() == 1);
+                            Token t_iter;
+                            t_iter.type = CPP_TYPE;
+                            t_iter.val = "iterator";
+                            t_iter.ts.push_back(std::move(cur_scope->ts[0]));
+                            cur_scope->ts.clear();
+                            cur_scope->ts.push_back(t_iter);
+                            t+=2;
+                            step+=2;
+                            continue;
+                        } else {
+                            cur_scope->ts.push_back(*t);
+                            ++t;
+                            ++step;
+                            continue;
+                        }
                     } else if (t->type == CPP_OPEN_PAREN || t->type == CPP_CLOSE_PAREN) {
                         //function 会带()
                         cur_scope->ts.push_back(*t);
@@ -2404,7 +2418,7 @@ void ParserGroup::extract_container() {
                         ++step;
                         continue;
                     } else if (t->type == CPP_SCOPE) {
-                        //指针
+                        //域
                         cur_scope->ts.push_back(*t);
                         ++t;
                         ++step;
@@ -2448,6 +2462,7 @@ void ParserGroup::extract_container() {
                 t_n->type == CPP_SCOPE && (t_nn->val == "iterator" || t_nn->val == "const_iterator")) {
                 //合并
                 t_nn->type = CPP_TYPE;
+                t_nn->val = "iterator";
                 t_nn->ts.clear();
                 t_nn->ts.push_back(*t);
                 t = ts.erase(t);//del container
@@ -2925,6 +2940,7 @@ void ParserGroup::extract_class_member (
         } else if (st_brace.size() == 1 && t->type == CPP_TYPE && t_n->type == CPP_NAME &&
             ((t-1)->type == CPP_OPEN_BRACE || 
              (t-1)->type == CPP_CLOSE_BRACE ||
+             (t-1)->type == CPP_CLASS_BEGIN ||
              (t-1)->type == CPP_COMMENT ||
              (t-1)->type == CPP_COLON ||
              (t-1)->type == CPP_SEMICOLON||
@@ -3019,6 +3035,9 @@ void ParserGroup::extract_class2() {
                 jump_brace(t, ts);
                 bool tm = false;
                 assert(is_in_class_struct(cur_c_name, tm));
+                if (cur_c_name == "InnerSocket") {
+                    std::cout << "gotit";
+                }
                 extract_class_member(cur_c_name, t_begin, t_begin, t, ts, tm);
             } else {
                 ++t;
@@ -3757,11 +3776,13 @@ Token ParserGroup::recall_subjust_type(
                 return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 1);
             } else if (t_p->type == CPP_TYPE) {
                 return *t_p;
-            } else {
+            } else if (t_p->type == CPP_NAME) {
                 std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
                 Token tt;
                 tt.type = CPP_OTHER;
                 return tt;
+            } else {
+                //do nothing
             }
         } else if (t->val == v_name && t_n->type == CPP_OPEN_PAREN) {
             //可能是拷贝构造 如 type a(...)
@@ -3776,11 +3797,13 @@ Token ParserGroup::recall_subjust_type(
                 return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 2);
             } else if (t_p->type == CPP_TYPE) {
                 return *t_p;
-            } else {
+            } else if (t_p->type == CPP_NAME) {
                 std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
                 Token tt;
                 tt.type = CPP_OTHER;
                 return tt;
+            } else {
+                //do nothing
             }
         } else if (t->val == v_name && t_n->type == CPP_SEMICOLON) {
             //没有默认参数的构造（warning） 如 type a;
@@ -3796,11 +3819,13 @@ Token ParserGroup::recall_subjust_type(
                 return tt;
             } else if (t_p->type == CPP_TYPE) {
                 return *t_p;
-            } else {
+            } else if (t_p->type == CPP_NAME) {
                 std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
                 Token tt;
                 tt.type = CPP_OTHER;
                 return tt;
+            } else {
+                //do nothing
             }
         } else if (t->val == "catch" && (t+1)->type == CPP_OPEN_PAREN) {
             //catch语句的特殊处理, 在catch的括号内部寻找可能的赋值语句
@@ -3875,6 +3900,21 @@ static void jump_before_praen(std::deque<Token>::iterator& t, const std::deque<T
     }
 }
 
+static void jump_before_praen(std::deque<Token>::iterator& t) {
+    assert(t->type == CPP_CLOSE_PAREN);
+    std::stack<Token> ts;
+    ts.push(*t);
+    --t;
+    while (!ts.empty()) {
+        if(t->type == CPP_OPEN_PAREN) {
+            ts.pop();
+        } else if (t->type == CPP_CLOSE_PAREN) {
+            ts.push(*t);
+        }
+        --t;
+    }
+}
+
 static void jump_before_angle_brace(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
     assert(t->type == CPP_GREATER);
     std::stack<Token> ts;
@@ -3898,12 +3938,14 @@ Token ParserGroup::get_fn_ret_type(
     const std::map<std::string, Token>& paras, bool is_cpp) {
     
     const std::string fn_name = t->val;
+    const bool deref = check_deref(t, true);
     ///\ 1 查看是不是静态调用，如果是则返回false（之前已经将所有的类静态调用都设置成function了）
     if((t-1)->type == CPP_SCOPE) {
         std::cout << "static call with class: " << (t-2)->val << "\n";
         const std::string sc_name = (t-2)->val;
         Token ret;
         if (is_member_function(sc_name, fn_name, ret)) {
+            ret.deref = deref;
             return ret;
         } else {
             //3th 模块的静态调用
@@ -3921,17 +3963,20 @@ Token ParserGroup::get_fn_ret_type(
         Token ret;
         if (is_global_function(fn_name, ret)) {
             std::cout << "is global fn\n";
+            ret.deref = deref;
             return ret;
         }
 
         //1.2 匹配成员函数
         //把该类以及基类的方法拿出来查看
         if (!class_name.empty() && is_member_function(class_name, fn_name, ret)) {
+            ret.deref = deref;
             return ret;
         }
 
         //1.3 如果是cpp则匹配局部函数
-        if (is_cpp && is_global_function(fn_name, ret)) {
+        if (is_cpp && is_local_function(file_name, fn_name, ret)) {
+            ret.deref = deref;
             return ret;
         }
 
@@ -3974,11 +4019,20 @@ Token ParserGroup::get_fn_ret_type(
             //是容器
             std::cout << "contaier " << tt.val << " 's function: " << fn_name << " called \n";
             if (is_stl_container_ret_iterator(fn_name)) {
-                Token ret0;
-                ret0.type = CPP_TYPE;
-                ret0.val = "iterator";
-                ret0.ts.push_back(tt);
-                return ret0;
+                if (tt.val == "shared_ptr" || tt.val == "auto_ptr" || tt.val == "unique_ptr") {
+                    //LABEL 智能指针包含容器
+                    Token ret0;
+                    ret0.type = CPP_TYPE;
+                    ret0.val = "iterator";
+                    ret0.ts.push_back(tt.ts[0]);
+                    return ret0;
+                } else {
+                    Token ret0;
+                    ret0.type = CPP_TYPE;
+                    ret0.val = "iterator";
+                    ret0.ts.push_back(tt);
+                    return ret0;
+                }
             } else if (is_stl_container_ret_val(fn_name)) {
                 assert(!tt.ts.empty());
                 return tt.ts[0];
@@ -4010,6 +4064,35 @@ Token ParserGroup::get_close_subject_type(
     //封闭式的类型分析, 从尾到头分析(主要分析最后一个元素)
     //TODO 这里忽略运算符重载（默认运算符重载会返回相同的类型)
     return get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);    
+}
+
+bool ParserGroup::check_deref(std::deque<Token>::iterator t, bool is_fn) {
+    //只是找乘号, 不是真正的解引用, 因为只有迭代器和解引用之间才会发生类型的变化
+    //assert(t->type == CPP_NAME || t->type == CPP_CALL);
+    bool deref = (t-1)->type == CPP_MULT;
+    if (!deref && is_fn) {
+        //看有没有被括号包裹
+        //跳过函数调用看有没有括号
+        ++t;
+        assert(t->type == CPP_OPEN_PAREN);
+        jump_paren(t);
+        ++t;
+
+        if (t->type == CPP_PLUS_PLUS || t->type == CPP_AND_AND) {
+            //跳过++ --
+            ++t;
+        }
+
+        if (t->type == CPP_CLOSE_PAREN) {
+            jump_before_praen(t);         
+        } else {
+            return deref;
+        }
+        
+        return t->type == CPP_MULT;
+    } else {
+        return deref;
+    }
 }
 
 Token ParserGroup::get_subject_type(
@@ -4048,15 +4131,25 @@ Token ParserGroup::get_subject_type(
             //迭代器
             //TODOTODOTODO 这里需要调试
             assert(!tt.ts.empty());
-            if (t->val == "second") {
-                assert(tt.ts[0].ts.size() == 2);
-                return tt.ts[0].ts[1];
-            } else {//有可能是first 或者 其他的容器
-                assert(!tt.ts[0].ts.empty());
+            if (tt.deref && tt.ts[0].val == "vector") {
                 return tt.ts[0].ts[0];
+            } else {
+                if (t->val == "second") {
+                    assert(tt.ts[0].ts.size() >= 2);
+                    return tt.ts[0].ts[1];
+                } else {//有可能是first 或者 其他的容器
+                    assert(!tt.ts[0].ts.empty());
+                    return tt.ts[0].ts[0];
+                }
             }
         } else {
             //t->val 是 tt的成员
+            //判断是否是智能指针
+            if ((tt.val == "shared_ptr" || tt.val == "auto_ptr" || tt.val == "unique_ptr") && t_p->type == CPP_POINTER) {
+                Token ttt = tt.ts[0];
+                tt = ttt;
+            }
+            
             bool tm=false;
             if (is_in_class_struct(tt.val, tm)) {
                 //找class tt的成员变量
@@ -4162,7 +4255,9 @@ Token ParserGroup::get_subject_type(
         }
     } else if (t->type == CPP_NAME) {
         //递归的终点
+        bool deref = check_deref(t,false);
         Token tt = recall_subjust_type(t, t_start, class_name, file_name, paras, is_cpp);
+        tt.deref = deref;
         return tt;
     } else {
         assert(false);
@@ -4186,7 +4281,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
         std::cout << "static call with class: " << (t-2)->val << " not in module.\n";
         return false;
     }
-            
+
     ///\ 2 查看是否没有主语
     if ((t-1)->type != CPP_POINTER && (t-1)->type != CPP_DOT) {
         ///\3 没有主语则匹配 全局函数 / 函数成员函数 / 或者局部函数(需要是cpp文件)
@@ -4198,20 +4293,21 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
             return true;
         }
 
-        if (class_name.empty()) {
+        if (!class_name.empty()) {
             std::cerr << "class name is null if it's not global fn\n";
-            return false;
+            //1.2 匹配成员函数
+            //把该类以及基类的方法拿出来查看
+            bool tm=false;
+            if (is_in_class_struct(class_name, tm)) {
+                if(is_member_function(class_name, fn_name, ret)) {
+                    std::cout << "is member fn\n";
+                    return !tm;
+                }
+            } 
         }
 
-        //1.2 匹配成员函数
-        //把该类以及基类的方法拿出来查看
-        if(is_member_function(class_name, fn_name, ret)) {
-            std::cout << "is member fn\n";
-            return true;
-        } 
-
         //1.3 如果是cpp则匹配局部函数
-        if (is_cpp && is_global_function(fn_name, ret)) {
+        if (is_cpp && is_local_function(file_name, fn_name, ret)) {
             std::cout << "is local fn\n";
             return true;
         }
@@ -4223,6 +4319,8 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
         std::cerr << "fn dismatch, may 3th fn, or new construct\n";
         return false;
     } else {
+        Token fn_call_way = *(t-1);
+
         --t;
         --t;
 
@@ -4248,7 +4346,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
 
         //这里要分析是不是容器
         if (is_stl_container(t_type.val)) {
-            if (t_type.val == "shared_ptr" || t_type.val == "auto_ptr" || t_type.val == "unique_ptr") {
+            if ((t_type.val == "shared_ptr" || t_type.val == "auto_ptr" || t_type.val == "unique_ptr") && fn_call_way.type == CPP_POINTER) {
                 Token ttt = t_type.ts[0];
                 t_type = ttt;
             } else if (t_type.val == "weak_ptr") {
@@ -4259,9 +4357,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
                 //assert(false);
                 return false;
             }
-        } 
-
-        
+        }        
 
         bool tm = false;
         if (is_in_class_struct(t_type.val, tm)) {
@@ -4300,7 +4396,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "findAndGetOFString") {
+            if(t->val == "transform") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4308,6 +4404,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
                 std::cout << "may construct: " << (t-1)->type << " " << t->val << std::endl;
                 ++t;
             } else if (is_call_in_module(t, t_start, class_name, file_name, paras, is_cpp, subject_t)) {
+                std::cout << "label call: " << t->val << std::endl;
                 t->type = CPP_CALL;
                 t+=2;
             } else {
@@ -4338,7 +4435,7 @@ void ParserGroup::label_call()  {
         } 
 
         std::cout << "label file: " << file_name << std::endl;
-        if (file_name == "mi_roi_statistician.inl") {
+        if (file_name == "mi_camera_base.cpp") {
             std::cout << "gotit";
         }
         std::deque<Token>& ts = parser._ts;        
@@ -4423,7 +4520,7 @@ void ParserGroup::label_fn_as_parameter() {
 
         std::deque<Token>& ts = parser._ts; 
         for (auto t = ts.begin(); t != ts.end(); ) {
-            if (t->type == CPP_NAME) {
+            if (t->type == CPP_NAME && (t+1)->type != CPP_OPEN_PAREN) {//区别于函数调用
                 Token ret;
                 if (is_global_function(t->val,ret)) {
                     t->type = CPP_CALL;
@@ -4454,8 +4551,7 @@ void ParserGroup::replace_call() {
         //1 把整合过的token中非模板类的member fn 以及局部和全局方程 以及 call 抽取出来
         std::deque<Token>& ts = parser._ts;
         for (auto t = ts.begin(); t != ts.end(); ++t) {
-            if (t->type == CPP_CALL ||
-                t->type == CPP_FUNCTION) { 
+            if ((t->type == CPP_CALL || t->type == CPP_FUNCTION) && t->val != "operator") { 
                 to_be_replace.push_back(*t);
             } else if (t->type == CPP_MEMBER_FUNCTION && t->val != "operator") {
                 assert(!t->subject.empty());

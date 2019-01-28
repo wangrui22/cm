@@ -131,6 +131,13 @@ struct Token {
     //function 类型: 如果是空则是全局的
     //               如果有值则作用域为subject(这里是class名)
     std::string subject;
+
+    bool deref;
+
+    Token():loc(-1),deref(false) {}
+
+    Token(TokenType type0, const std::string& val0, int loc0):
+    type(type0),val(val0),loc(loc0),deref(false) {}
 };
 
 //作用域, 为空是全局作用域

@@ -185,6 +185,8 @@ private:
         std::deque<Token>::iterator t_end,
         std::map<std::string, Token>& paras,
         std::vector<std::string>& paras_list);
+
+    bool check_deref(std::deque<Token>::iterator t, bool is_fn);
 private:
     std::vector<std::string> _file_name;
     std::vector<std::string> _file_path;
