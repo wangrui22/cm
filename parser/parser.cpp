@@ -4036,6 +4036,11 @@ Token ParserGroup::get_fn_ret_type(
             ret.deref = deref;
             return ret;
         }
+        
+        if (is_ignore_function(fn_name)) {
+            ret.type = CPP_OTHER;
+            return ret;
+        }
 
         //1.2 匹配全局函数
         if (is_global_function(fn_name, ret)) {
@@ -4385,6 +4390,10 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
                     return !tm && !is_3th_base(class_name) && !is_ignore_class(class_name);
                 }
             } 
+        }
+
+        if (is_ignore_function(fn_name)) {
+            return false;
         }
 
         //1.2 匹配全局函数
@@ -4738,8 +4747,14 @@ void ParserGroup::replace_call() {
         //1 把整合过的token中非模板非三方模块继承的类的member fn 以及局部和全局方程 以及 call 抽取出来
         std::deque<Token>& ts = parser._ts;
         for (auto t = ts.begin(); t != ts.end(); ++t) {
-            if ((t->type == CPP_CALL || t->type == CPP_FUNCTION) && t->val != "operator") { 
-                to_be_replace.push_back(*t);
+            if ((t->type == CPP_CALL || t->type == CPP_FUNCTION) && t->val != "operator" && t->val != "main") { 
+                if (t->type == CPP_FUNCTION) {
+                    if (!is_ignore_function(t->val)) {
+                        to_be_replace.push_back(*t);    
+                    }
+                } else {
+                    to_be_replace.push_back(*t);
+                }
             } else if (t->type == CPP_MEMBER_FUNCTION && t->val != "operator") {
                 assert(!t->subject.empty());
                 bool tm=false;
