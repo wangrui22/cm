@@ -217,6 +217,7 @@ private:
     std::map<std::string, std::vector<ClassFunction>> _g_class_fn;//全局的class的成员函数
     std::map<std::string, std::vector<ClassFunction>> _g_class_fn_with_base;//全局的class的成员函数,包含了基类的所有函数(不区分access)
     std::map<std::string, std::vector<ClassVariable>> _g_class_variable;//全局的class的成员变量
+    std::map<std::string, std::vector<ClassVariable>> _g_class_variable_with_base;//全局的class的成员变量,包含了基类的所有成员变量(不区分access)
     std::set<std::string> _g_enum;//全局的枚举
 
     std::map<std::string, Variable> _g_variable;//全局变量<名称,type_token>

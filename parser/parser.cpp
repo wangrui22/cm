@@ -3166,6 +3166,7 @@ void ParserGroup::extract_class2() {
     for (auto it = _g_class.begin(); it != _g_class.end(); ++it) {
         //在成员函数中可以调用该类 以及该类所有基类的方法
         std::vector<ClassFunction> fns = _g_class_fn.find(it->first)->second;
+        std::vector<ClassVariable> vs = _g_class_variable.find(it->first)->second;
 
         //把所有基类的方法提取出来
         auto it_bases = _g_class_bases.find(it->first);
@@ -3174,9 +3175,13 @@ void ParserGroup::extract_class2() {
         for (auto it2 = it_bases->second.begin(); it2 != it_bases->second.end(); ++it2) {
             std::vector<ClassFunction> fns_base = _g_class_fn.find(it2->first)->second;
             fns.insert(fns.end(), fns_base.begin(), fns_base.end());
+            std::vector<ClassVariable> vs_base = _g_class_variable.find(it2->first)->second;
+            vs.insert(vs.end(), vs_base.begin(), vs_base.end());
+            
         }
 
         _g_class_fn_with_base[it->first] = fns;
+        _g_class_variable_with_base[it->first] = vs;
     }
     
 }
@@ -5155,8 +5160,8 @@ bool ParserGroup::is_member_function(const std::string& c_name, const std::strin
 }
 
 bool ParserGroup::is_member_variable(const std::string& c_name, const std::string& c_v_name, Token& t_type) {
-    auto it_c_vs = _g_class_variable.find(c_name);
-    if (it_c_vs != _g_class_variable.end()) {
+    auto it_c_vs = _g_class_variable_with_base.find(c_name);
+    if (it_c_vs != _g_class_variable_with_base.end()) {
         for (auto it_v = it_c_vs->second.begin(); it_v != it_c_vs->second.end(); ++it_v) {
             if (it_v->m_name == c_v_name) {
                 t_type = it_v->type;

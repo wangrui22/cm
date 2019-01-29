@@ -33,3 +33,4 @@ CacheDB
 CudaVolumeInfos
 CudaRayCastInfos
 Matrix4
+GLObjectShieldBase
