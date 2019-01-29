@@ -4061,7 +4061,7 @@ Token ParserGroup::get_fn_ret_type(
         if (tt.val == "weak_ptr" && fn_name == "lock") {
             // weak_ptr.lock()
             return tt.ts[0];
-        } 
+        }
 
         Token ret;
         if (is_member_function(tt.val, fn_name, ret)) {
@@ -4101,6 +4101,14 @@ Token ParserGroup::get_fn_ret_type(
             } else if (is_stl_container_ret_val(fn_name)) {
                 assert(!tt.ts.empty());
                 return tt.ts[0];
+            } else if (tt.val == "shared_ptr" || tt.val == "auto_ptr" || tt.val == "unique_ptr") {
+                if (is_member_function(tt.ts[0].val, fn_name, ret)) {
+                    return ret;
+                } else {
+                    Token t_o;
+                    t_o.type == CPP_OTHER;
+                    return t_o;
+                }
             } else {
                 Token t_o;
                 t_o.type == CPP_OTHER;
@@ -4461,7 +4469,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "dist_sq") {
+            if(t->val == "normalize_pixel_value") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4522,7 +4530,7 @@ void ParserGroup::label_call()  {
         } 
 
         std::cout << "label file: " << file_name << std::endl;
-        if (file_name == "mi_gl_resource_manager_container.h") {
+        if (file_name == "mi_rc_step_composite.cpp") {
             std::cout << "gotit";
         }
         std::deque<Token>& ts = parser._ts;        
