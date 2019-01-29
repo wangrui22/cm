@@ -88,6 +88,7 @@ private:
     bool is_in_marco(const std::string& m);
     bool is_in_marco(const std::string& m, Token& val);
     bool is_in_class_struct(const std::string& name, bool& tm);
+    bool is_3th_base(const std::string& name);
     bool is_in_typedef(const std::string& name);
     bool is_in_typedef(const std::string& name, Token& t_type);
     

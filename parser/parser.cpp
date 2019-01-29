@@ -3761,6 +3761,10 @@ Token ParserGroup::recall_subjust_type(
     bool is_cpp) {
 
     const std::string v_name = t->val;
+    if (v_name == "col_spacing") {
+        std::cout <<"gotit";
+    }
+
     //类成员变量
     Token t_type;
     if (is_member_variable(class_name, v_name, t_type)) {
@@ -3839,9 +3843,33 @@ Token ParserGroup::recall_subjust_type(
                 Token tt;
                 tt.type = CPP_OTHER;
                 return tt;
-            } else {
-                //do nothing
+            } else if (t_p->type == CPP_COMMA) {
+                //可能遇到 type a,b,target;这种情况
+            MULTI_VARIABLE:
+                //往前找type
+                --t_p;
+                while((t_p->type == CPP_MULT || t_p->type == CPP_AND || t_p->type == CPP_NAME) && t_p<=t_start) {
+                    --t_p;
+                }
+
+                if (t_p->type == CPP_TYPE) {
+                    return *t_p;
+                } else if (t_p->type == CPP_COMMA) {
+                    goto MULTI_VARIABLE;
+                } else {
+                    //do nothing, try other case
+                }
             }
+        } else if (t->val == v_name && t_n->type == CPP_COMMA && ((t-1)->type == CPP_TYPE || (t-1)->type == CPP_COMMA)) {
+            //type a,b,c;
+            if (t_p->type == CPP_TYPE) {
+                return *t_p;
+            } else if (t_p->type == CPP_COMMA) {
+                goto MULTI_VARIABLE;
+            } else {
+                //do nothing, try other case
+            }
+
         } else if (t->val == "catch" && (t+1)->type == CPP_OPEN_PAREN) {
             //catch语句的特殊处理, 在catch的括号内部寻找可能的赋值语句
             std::stack<Token> t_c_p;
@@ -4294,6 +4322,9 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
     fn_subject_type.type = CPP_OTHER;
 
     const std::string fn_name = t->val;
+    if (fn_name == "what") {
+        std::cout << "got";
+    }
     ///\ 1 查看是不是静态调用，如果是则返回false（之前已经将所有的类静态调用都设置成function了）
     if((t-1)->type == CPP_SCOPE) {
         std::cout << "static call with class: " << (t-2)->val << " not in module.\n";
@@ -4319,7 +4350,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
             if (is_in_class_struct(class_name, tm)) {
                 if(is_member_function(class_name, fn_name, ret)) {
                     std::cout << "is member fn\n";
-                    return !tm;
+                    return !tm && !is_3th_base(class_name);
                 }
             } 
         }
@@ -4383,16 +4414,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
             if (tm) {
                return false; 
             } else {
-                //get class base
-                auto c_bases = _g_class_bases.find(t_type.val);
-                if (c_bases != _g_class_bases.end()) {
-                    for (auto it = c_bases->second.begin(); it != c_bases->second.end(); ++it) {
-                        if (it->first == THIRD_CLASS) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
+                return !is_3th_base(t_type.val);
             }
         } else {
             return false;
@@ -4566,7 +4588,7 @@ void ParserGroup::replace_call() {
         std::cout << "replace file: " << file_name << std::endl;
         std::deque<Token> to_be_replace;
         
-        //1 把整合过的token中非模板类的member fn 以及局部和全局方程 以及 call 抽取出来
+        //1 把整合过的token中非模板非三方模块继承的类的member fn 以及局部和全局方程 以及 call 抽取出来
         std::deque<Token>& ts = parser._ts;
         for (auto t = ts.begin(); t != ts.end(); ++t) {
             if ((t->type == CPP_CALL || t->type == CPP_FUNCTION) && t->val != "operator") { 
@@ -4574,7 +4596,7 @@ void ParserGroup::replace_call() {
             } else if (t->type == CPP_MEMBER_FUNCTION && t->val != "operator") {
                 assert(!t->subject.empty());
                 bool tm=false;
-                if (is_in_class_struct(t->subject, tm) && !tm) {
+                if (is_in_class_struct(t->subject, tm) && !tm && !is_3th_base(t->subject)) {
                     to_be_replace.push_back(*t);
                 }
             }
@@ -5110,3 +5132,16 @@ bool ParserGroup::is_stl_container_ret_val(const std::string& name) {
 
     return false;
 }
+
+bool ParserGroup::is_3th_base(const std::string& name) {
+    auto c_bases = _g_class_bases.find(name);
+    if (c_bases != _g_class_bases.end()) {
+        for (auto it = c_bases->second.begin(); it != c_bases->second.end(); ++it) {
+            if (it->first == THIRD_CLASS) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}   
