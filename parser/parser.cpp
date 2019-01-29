@@ -3023,7 +3023,7 @@ void ParserGroup::extract_class2() {
         Parser& parser = *(*it);
         std::deque<Token>& ts = parser._ts;
         std::string file_name = _file_name[idx++];
-        std::cout << "extract class2: " << file_name << std::endl;
+        std::cout << "extract class member variable: " << file_name << std::endl;
         std::string cur_c_name;
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->type == CPP_CLASS || t->type == CPP_STURCT) {
@@ -3046,9 +3046,12 @@ void ParserGroup::extract_class2() {
     }
 
     //2 把所有成员函数的定义处 标记成 CPP_MEMBER_FUNCTION
+    idx = 0;
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         std::deque<Token>& ts = parser._ts;
+        std::string file_name = _file_name[idx++];
+        std::cout << "extract class function: " << file_name << std::endl;
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto t_n = t+1;//type: class
             auto t_nn = t+2;//::
@@ -3058,8 +3061,21 @@ void ParserGroup::extract_class2() {
                 continue;
             }
 
-            if (t_n->type == CPP_TYPE && t_nn->type == CPP_SCOPE && (t_nnn->type == CPP_NAME || t_nnn->type == CPP_TYPE)) {
+            if (t_n->type == CPP_TYPE && t_nn->type == CPP_SCOPE && (t_nnn->type == CPP_NAME || t_nnn->type == CPP_TYPE || t_nnn->val == "operator")) {
                 bool tm=false;
+
+                if (t_nnn->val == "operator") {
+                    //把operator后面的符号带进去
+                    t_nnn->type = CPP_MEMBER_FUNCTION;
+                    t_nnn->subject = t_n->val;
+                    ++t_nnn;
+                    while(t_nnn->type != CPP_OPEN_PAREN) {
+                        (t_nnn-1)->ts.push_back(*t_nnn);
+                        t_nnn = ts.erase(t_nnn);
+                    }   
+                    t = t_nnn;
+                    continue;
+                }
 
                 //LABEL 2 这里会把thread引用类成员函数作为入口函数,也标记成CPP_FUNCTION, 对接口混淆没有影响
                 if (is_in_class_struct(t_n->val, tm)) {
@@ -3093,7 +3109,6 @@ void ParserGroup::extract_class2() {
                     //     t+=3;
                     //     continue;
                     // }
-
                     for (auto it_fn = it_fns->second.begin(); it_fn != it_fns->second.end(); ++it_fn) {
                         const ClassFunction& fn = *it_fn;
                         if (fn.fn_name == t_nnn->val) {
@@ -4132,7 +4147,9 @@ Token ParserGroup::get_subject_type(
             //TODOTODOTODO 这里需要调试
             assert(!tt.ts.empty());
             if (tt.deref && tt.ts[0].val == "vector") {
-                return tt.ts[0].ts[0];
+                Token tmp = tt.ts[0].ts[0];
+                tt = tmp;
+                goto CHECK_CLASS_MEMBER;
             } else {
                 if (t->val == "second") {
                     assert(tt.ts[0].ts.size() >= 2);
@@ -4145,6 +4162,7 @@ Token ParserGroup::get_subject_type(
         } else {
             //t->val 是 tt的成员
             //判断是否是智能指针
+        CHECK_CLASS_MEMBER:
             if ((tt.val == "shared_ptr" || tt.val == "auto_ptr" || tt.val == "unique_ptr") && t_p->type == CPP_POINTER) {
                 Token ttt = tt.ts[0];
                 tt = ttt;
@@ -4396,7 +4414,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "transform") {
+            if(t->val == "begin") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4435,7 +4453,7 @@ void ParserGroup::label_call()  {
         } 
 
         std::cout << "label file: " << file_name << std::endl;
-        if (file_name == "mi_camera_base.cpp") {
+        if (file_name == "mi_sql_filter.cpp") {
             std::cout << "gotit";
         }
         std::deque<Token>& ts = parser._ts;        
