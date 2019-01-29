@@ -3721,7 +3721,7 @@ std::map<std::string, Token> ParserGroup::label_skip_paren(std::deque<Token>::it
             sbrace.push(*t);
             ++t;
         } else if (t->type == CPP_TYPE &&
-                  (t+1) != ts.end() && (t+1)->type == CPP_OPEN_BRACE &&
+                  (t+1) != ts.end() && (t+1)->type == CPP_OPEN_PAREN &&
                   (t+2) != ts.end() && (t+2)->type == CPP_AND &&
                   (t+3) != ts.end() && (t+3)->type == CPP_NAME &&
                   (t+4) != ts.end() && (t+4)->type == CPP_CLOSE_PAREN &&
@@ -3811,6 +3811,30 @@ Token ParserGroup::recall_subjust_type(
         auto t_nn = t+2;
         if (t->val == v_name && t_n->type == CPP_EQ) {
             //可能是复制构造 如 type a =
+            
+            //过滤掉 type[*&]
+            while((t_p->type == CPP_MULT || t_p->type == CPP_AND) && t_p<=t_start) {
+                --t_p;
+            }
+
+            if (t_p->val == "auto") {
+                //寻找赋值语句的右部
+                std::cout << "get type auto.\n";
+                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 1);
+            } else if (t_p->type == CPP_TYPE) {
+                return *t_p;
+            } else if (t_p->type == CPP_NAME) {
+                std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
+                Token tt;
+                tt.type = CPP_OTHER;
+                return tt;
+            } else {
+                //do nothing
+            }
+        } else if (t->val == v_name && t_n->type == CPP_OPEN_SQUARE && 
+            (t_n+1)->type == CPP_CLOSE_SQUARE &&
+            (t_n+2)->type == CPP_EQ) {
+            //可能是数组复制构造 type a[] = 
             //过滤掉 type[*&]
             while((t_p->type == CPP_MULT || t_p->type == CPP_AND) && t_p<=t_start) {
                 --t_p;
@@ -3896,6 +3920,27 @@ Token ParserGroup::recall_subjust_type(
             } else {
                 //do nothing, try other case
             }
+
+        } else if (t->val == v_name && t_n->type == CPP_OPEN_SQUARE && 
+            (t_n+2)->type == CPP_CLOSE_SQUARE && 
+            ((t_n+3)->type == CPP_SEMICOLON || (t_n+3)->type == CPP_EQ)) {
+            //type a[num];
+            //type a[num] = ;
+            if (t_p->val == "auto") {
+                //寻找赋值语句的右部
+                std::cout << "get type auto.\n";
+                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 2);
+            } else if (t_p->type == CPP_TYPE) {
+                return *t_p;
+            } else if (t_p->type == CPP_NAME) {
+                std::cout << "LABEL: " << "may be is 3th type: " << t_p->val << std::endl;
+                Token tt;
+                tt.type = CPP_OTHER;
+                return tt;
+            } else {
+                //do nothing
+            }
+
 
         } else if (t->val == "catch" && (t+1)->type == CPP_OPEN_PAREN) {
             //catch语句的特殊处理, 在catch的括号内部寻找可能的赋值语句
@@ -4202,6 +4247,8 @@ Token ParserGroup::get_subject_type(
             return tt;
         }
 
+        CHECK_CLASS_MEMBER:
+
         if ((tt.val == "pair" || tt.val == "map") && (t->val == "first" || t->val == "second")) {
             //键值对容器
             assert(tt.ts.size() ==2);
@@ -4230,7 +4277,7 @@ Token ParserGroup::get_subject_type(
         } else {
             //t->val 是 tt的成员
             //判断是否是智能指针
-        CHECK_CLASS_MEMBER:
+        //CHECK_CLASS_MEMBER:
             if ((tt.val == "shared_ptr" || tt.val == "auto_ptr" || tt.val == "unique_ptr") && t_p->type == CPP_POINTER) {
                 Token ttt = tt.ts[0];
                 tt = ttt;
@@ -4483,7 +4530,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "find") {
+            if(t->val == "get_type") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4544,7 +4591,7 @@ void ParserGroup::label_call()  {
         } 
 
         std::cout << "label file: " << file_name << std::endl;
-        if (file_name == "mi_corner.cpp") {
+        if (file_name == "mi_app_none_image_roi.cpp") {
             std::cout << "gotit";
         }
         std::deque<Token>& ts = parser._ts;        
@@ -4588,7 +4635,7 @@ void ParserGroup::label_call()  {
                 ++t;
 
                 std::cout << "label call in class fn: " << fn_name << std::endl;
-                if (fn_name == "what") {
+                if (fn_name == "check_dirty_camera_canvas") {
                     std::cout << "gotit";
                 }
 

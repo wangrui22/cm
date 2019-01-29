@@ -10,6 +10,8 @@ GLFBO
 GLProgram
 GLTimeQuery
 GLUtils
+XGLContext
+GLContext
 CudaObject
 CudaTextureBase
 CudaTexture1D
@@ -34,3 +36,6 @@ CudaVolumeInfos
 CudaRayCastInfos
 Matrix4
 GLObjectShieldBase
+IOperation
+IOperationMergeable
+IPriorityOperation
