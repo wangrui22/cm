@@ -4207,9 +4207,9 @@ Token ParserGroup::get_subject_type(
             }
         } else if (tt.val == "iterator" || tt.val == "const_iterator") {
             //迭代器
-            //TODOTODOTODO 这里需要调试
             assert(!tt.ts.empty());
-            if (tt.deref && tt.ts[0].val == "vector") {
+            if ((tt.deref && tt.ts[0].val == "vector") || (t_p->type == CPP_POINTER && tt.ts[0].val == "vector")) {
+                //对vector的特殊处理, 解引用和迭代器的-> 都是返回元素的成员
                 Token tmp = tt.ts[0].ts[0];
                 tt = tmp;
                 goto CHECK_CLASS_MEMBER;
@@ -4474,7 +4474,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "normalize_pixel_value") {
+            if(t->val == "find") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4535,7 +4535,7 @@ void ParserGroup::label_call()  {
         } 
 
         std::cout << "label file: " << file_name << std::endl;
-        if (file_name == "mi_rc_step_composite.cpp") {
+        if (file_name == "mi_corner.cpp") {
             std::cout << "gotit";
         }
         std::deque<Token>& ts = parser._ts;        
