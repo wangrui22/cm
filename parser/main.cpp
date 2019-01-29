@@ -26,7 +26,7 @@ static int get_source_files(std::vector<std::string>& files) {
 }
 
 static int get_ignore_file_name(std::vector<std::string>& files) {
-    std::ifstream in("./ignore", std::ios::in);
+    std::ifstream in("./ignore_file", std::ios::in);
     if (!in.is_open()) {
         std::cerr << "open config ignore failed.\n";  
         return -1;
@@ -43,6 +43,24 @@ static int get_ignore_file_name(std::vector<std::string>& files) {
     return 0;
 }
 
+static int get_ignore_class_name(std::set<std::string>& names) {
+    std::ifstream in("./ignore_class", std::ios::in);
+    if (!in.is_open()) {
+        std::cerr << "open config ignore failed.\n";  
+        return -1;
+    }
+    std::string line;
+    while(std::getline(in, line)) {
+        if (!line.empty()) {
+            names.insert(line);
+        }
+    }
+
+    in.close();
+
+    return 0;
+}
+
 int main(int argc, char* argv[]) {
     // if (argc != 3) {
     //     std::cout << "invalid arguments.\n";
@@ -51,12 +69,17 @@ int main(int argc, char* argv[]) {
 
     std::vector<std::string> src_dir;
     std::vector<std::string> ig_file;
+    std::set<std::string> ig_class;
 
     if (0 != get_source_files(src_dir)) {
         return -1;
     }
 
     if (0 != get_ignore_file_name(ig_file)) {
+        return -1;
+    }
+
+    if (0 != get_ignore_class_name(ig_class)) {
         return -1;
     }
 
@@ -146,6 +169,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    parser_group.set_ignore_class(ig_class);
     parser_group.extract_enum();
     parser_group.parse_marco();
     parser_group.extract_extern_type();

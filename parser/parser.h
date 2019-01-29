@@ -64,6 +64,8 @@ public:
 
     void add_parser(const std::string& file_name, const std::string& file_path, Parser* parser, Reader* reader);
     Parser* get_parser(const std::string& file_name);
+    void set_ignore_class(std::set<std::string> c_name);
+    void set_ignore_function(std::set<std::string> fn_name);
 
     //按顺序调用
     void parse_marco();
@@ -104,6 +106,9 @@ private:
     bool is_stl_container(const std::string& name);
     bool is_stl_container_ret_iterator(const std::string& name);
     bool is_stl_container_ret_val(const std::string& name);
+
+    bool is_ignore_class(const std::string& c_name);
+    bool is_ignore_function(const std::string& fn_name);
 
     void extract_class(
         std::deque<Token>::iterator& t, 
@@ -188,11 +193,22 @@ private:
         std::vector<std::string>& paras_list);
 
     bool check_deref(std::deque<Token>::iterator t, bool is_fn);
+
+    void label_fn_as_para_in_fn(std::deque<Token>::iterator t, 
+        const std::deque<Token>::iterator t_start,
+        const std::deque<Token>::iterator t_end, 
+        const std::string& class_name, 
+        const std::string& file_name, 
+        const std::map<std::string, Token>& paras,
+        bool is_cpp);
 private:
     std::vector<std::string> _file_name;
     std::vector<std::string> _file_path;
     std::vector<Parser*> _parsers;
     std::vector<Reader*> _readers;
+
+    std::set<std::string> _ignore_c_name;
+    std::set<std::string> _ignore_fn_name;
 
     std::vector<Token> _g_marco;//全局宏定义
     std::map<std::string, ClassType> _g_class;//全局class struct
