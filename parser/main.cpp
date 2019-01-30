@@ -195,6 +195,7 @@ int main(int argc, char* argv[]) {
     parser_group.set_ignore_class(ig_class);
     parser_group.set_ignore_function(ig_fn);
 
+    parser_group.remove_comments();
     parser_group.extract_enum();
     parser_group.parse_marco();
     parser_group.extract_extern_type();

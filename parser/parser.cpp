@@ -849,6 +849,20 @@ Parser* ParserGroup::get_parser(const std::string& file_name) {
     return nullptr;
 }
 
+void ParserGroup::remove_comments() {
+    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+        Parser& parser = *(*it);
+        std::deque<Token>& ts = parser._ts;
+        for (auto t = ts.begin(); t != ts.end(); ) {
+            if (t->type == CPP_COMMENT) {
+                t = ts.erase(t);
+            } else {
+                ++t;
+            }
+        }
+    }
+}
+
 void ParserGroup::parse_marco() {
     //l1 找纯粹的 define
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
@@ -1267,7 +1281,7 @@ void ParserGroup::parse_tempalte_para(
 void ParserGroup::extract_class(
     std::deque<Token>::iterator& t,
     std::deque<Token>::iterator t_begin, 
-    std::deque<Token>::iterator t_end, Scope scope,
+    std::deque<Token>::iterator &t_end, Scope scope,
     std::deque<Token>& ts,
     bool is_template) {
     //it begin calss
@@ -1784,6 +1798,10 @@ void ParserGroup::extract_class() {
                 //typedef struct {
                 // ...    
                 //}
+
+                if ((t+2)->val == "AnnotationROIHandlerFactory") {
+                    std::cout << "gotit";
+                }
 
                 if ((t+1)->type == CPP_OPEN_BRACE) {
                     ++t;
@@ -3907,6 +3925,11 @@ Token ParserGroup::recall_subjust_type(
                     return *t_p;
                 } else if (t_p->type == CPP_COMMA) {
                     goto MULTI_VARIABLE;
+                } else if (t_p->type == CPP_NAME && (t_p-1)->type == CPP_COMMA) {
+                    //type a,b,c;
+                    goto MULTI_VARIABLE;
+                } else if (t_p->type == CPP_NAME && (t_p-1)->type == CPP_TYPE) {
+                    return *(t_p-1);
                 } else {
                     //do nothing, try other case
                 }
@@ -3975,6 +3998,10 @@ Token ParserGroup::recall_subjust_type(
 
     //全局变量
     if (is_global_variable(v_name, t_type)) {
+        return t_type;
+    }
+
+    if (is_local_variable(file_name, v_name, t_type)) {
         return t_type;
     }
             
@@ -4366,7 +4393,8 @@ Token ParserGroup::get_subject_type(
                 if ((t_r->val == "static_cast" ||
                     t_r->val == "dynamic_cast" ||
                     t_r->val == "const_cast" ||
-                    t_r->val == "dynamic_pointer_cast") && t_paras.type == CPP_TYPE) {
+                    t_r->val == "dynamic_pointer_cast" || 
+                    t_r->val == "make_shared") && t_paras.type == CPP_TYPE) {
                     return t_paras;
                 } else {
                     std::cout << "cant handle template fn call: " << t_r->val << std::endl;
@@ -4522,7 +4550,8 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
     const std::string& class_name, 
     const std::string& file_name, 
     const std::map<std::string, Token>& paras,
-    bool is_cpp) {
+    bool is_cpp,
+    std::deque<Token>& ts) {
     //过程调用的语法为 [主语[->/.]]function(paras)
     assert(t->type == CPP_OPEN_BRACE);
 
@@ -4530,7 +4559,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "get_type") {
+            if(t->val == "run") {
                 std::cout << "gotit";
             }
             Token subject_t;
@@ -4566,6 +4595,51 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
             } else {
                 ++t;
             }
+        } else if(t->type == CPP_CLOSE_SQUARE && (t+1)->type == CPP_OPEN_PAREN) {
+            //可能是lambda表达式, 跳过括号看下一个是否是{
+            auto t_r = t+1;
+            std::map<std::string, Token> paras0 = label_skip_paren(t_r,ts);
+            if (t_r->type != CPP_OPEN_BRACE && t_r->type != CPP_POINTER) {
+                ++t;
+                continue;
+            }
+
+            std::cout << "catch lambda expression\n";
+
+            //获取[]内的局部变量类型, 默认能获取class的成员
+            auto t_p = t;
+            jump_before_square(t_p, t_start);
+            ++t_p;
+            assert(t_p->type == CPP_OPEN_SQUARE);
+            std::stack<Token> ssq;
+            ssq.push(*t_p);
+            ++t_p;
+            while(!ssq.empty() && t_p != ts.end()) {
+                if (t_p->type == CPP_CLOSE_SQUARE) {
+                    ssq.pop();
+                    ++t_p;
+                } else if (t_p->type == CPP_OPEN_SQUARE) {
+                    assert(false);
+                } else if (t_p->type == CPP_NAME) {
+                    auto t_subject = t_p;
+                    Token tt = get_subject_type(t_subject, t_start, class_name, file_name, paras, is_cpp);
+                    paras0[t_p->val] = tt;
+                    ++t_p;
+                } else {
+                    ++t_p;
+                }
+            }
+            
+            if (t_r->type == CPP_POINTER) {
+                //略过返回值,找到第一个{
+                while(t_r->type != CPP_OPEN_BRACE){
+                    ++t_r;
+                }
+            }
+            auto t_begin0 = t_r;
+            jump_brace(t_r, ts);
+            label_call_in_fn(t_begin0, t_begin0, t_r, class_name, file_name, paras0, is_cpp, ts);            
+            t = t_r+1;
         } else {
             ++t;
         }
@@ -4591,7 +4665,7 @@ void ParserGroup::label_call()  {
         } 
 
         std::cout << "label file: " << file_name << std::endl;
-        if (file_name == "mi_app_none_image_roi.cpp") {
+        if (file_name == "mi_ai_operation_change_ai_op_priority.cpp") {
             std::cout << "gotit";
         }
         std::deque<Token>& ts = parser._ts;        
@@ -4626,7 +4700,7 @@ void ParserGroup::label_call()  {
                 std::cout << "label fn " << fn_name << std::endl;
                 auto t_begin = t;
                 jump_brace(t, ts);
-                label_call_in_fn(t_begin, t_begin, t, class_name, file_name, paras, is_cpp);
+                label_call_in_fn(t_begin, t_begin, t, class_name, file_name, paras, is_cpp, ts);
                 
             } else if (t->type == CPP_MEMBER_FUNCTION && it_n->type == CPP_OPEN_PAREN) {
                 //寻找()后有没有 {
@@ -4654,7 +4728,7 @@ void ParserGroup::label_call()  {
                 std::cout << "label " << class_name << "::" << fn_name << std::endl;
                 auto t_begin = t;
                 jump_brace(t, ts);
-                label_call_in_fn(t_begin, t_begin, t, class_name, file_name, paras, is_cpp);
+                label_call_in_fn(t_begin, t_begin, t, class_name, file_name, paras, is_cpp, ts);
 
             } else {
                 ++t;

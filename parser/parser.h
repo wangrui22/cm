@@ -68,6 +68,7 @@ public:
     void set_ignore_function(std::set<std::string> fn_name);
 
     //按顺序调用
+    void remove_comments();
     void parse_marco();
     void extract_enum();
     void extract_extern_type();
@@ -113,7 +114,7 @@ private:
     void extract_class(
         std::deque<Token>::iterator& t, 
         std::deque<Token>::iterator it_begin, 
-        std::deque<Token>::iterator it_end, 
+        std::deque<Token>::iterator& it_end, 
         Scope cur_scope, 
         std::deque<Token>& ts,
         bool is_template);
@@ -184,7 +185,8 @@ private:
         const std::string& class_name, 
         const std::string& file_name, 
         const std::map<std::string, Token>& paras,
-        bool is_cpp);
+        bool is_cpp, 
+        std::deque<Token>& ts);
         
     void parse_tempalte_para(
         std::deque<Token>::iterator t_begin, 
