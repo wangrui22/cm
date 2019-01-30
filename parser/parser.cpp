@@ -3335,6 +3335,7 @@ void ParserGroup::extract_global_var_fn() {
                 (t-1)->type == CPP_OPEN_BRACE || //以 }结尾
                 (t-1)->type == CPP_COMMENT || //以注释结尾
                 (t-1)->type == CPP_MACRO || //以宏结尾
+                (t-1)->type == CPP_PREPROCESSOR || //以预处理语句结尾
                 (t-1)->type == CPP_SEMICOLON || //以;结尾,另开一头
                 (t-1)->type == CPP_GREATER || //模板函数
                 (t-1)->val == "inline" ||//函数修饰符
@@ -3605,6 +3606,7 @@ void ParserGroup::extract_local_var_fn() {
                 ((t) == ts.begin() ||
                 (t-1)->type == CPP_COMMENT || //以注释结尾
                 (t-1)->type == CPP_MACRO || //以宏结尾
+                (t-1)->type == CPP_PREPROCESSOR || //以预处理语句结尾
                 (t-1)->type == CPP_SEMICOLON || //以;结尾,另开一头
                 (t-1)->type == CPP_GREATER || //模板函数
                 (t-1)->type == CPP_CLOSE_BRACE || // }以上一个函数的}结尾
@@ -3612,6 +3614,7 @@ void ParserGroup::extract_local_var_fn() {
                 (t-1)->val == "inline" ||//函数修饰符
                 (t-1)->val == "static" ||//函数修饰符
                 (t-1)->val == "const" ||//函数修饰符
+                (t-1)->val == "extern" ||//定义在其他文件中的局部函数
                 (in_annoy && (t-1)->type==CPP_OPEN_BRACE)) ) { //namespace {后的第一个方程
 
                 std::cout << "may variable: " << t_n->val << std::endl;
