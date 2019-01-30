@@ -210,7 +210,7 @@ int main(int argc, char* argv[]) {
     parser_group.extract_local_var_fn();
     parser_group.label_call();
     parser_group.label_fn_as_parameter();
-    parser_group.replace_call();
+    parser_group.replace_call(true);
     
     parser_group.debug("./result");
 

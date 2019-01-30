@@ -83,7 +83,7 @@ public:
 
     void label_call();
     void label_fn_as_parameter();
-    void replace_call();
+    void replace_call(bool hash=false);
 
     void debug(const std::string& debug_out);
 

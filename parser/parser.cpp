@@ -6,6 +6,7 @@
 #include <stack>
 #include <functional>
 #include <algorithm>
+#include "util.h"
 
 static inline void print_token(const Token& t, std::ostream& out);
 
@@ -4854,12 +4855,13 @@ void ParserGroup::label_fn_as_parameter() {
 
 }
 
-void ParserGroup::replace_call() {
+void ParserGroup::replace_call(bool hash) {
     //替换的内容
     //所有的class名称, 所有的非模板类成员函数, 全局/局部函数, 所有的call, 
 
     int file_idx=0;
     const std::string REPLACE = "_replace";
+    const std::string RE_HEADER = "mi_";
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         const std::string file_name = _file_name[file_idx];
@@ -4910,15 +4912,34 @@ void ParserGroup::replace_call() {
         int loc_sum = 0;
         std::string code = parser._reader->_file_str;
         int last_loc = -1;
-        for (auto t = to_be_replace.begin(); t != to_be_replace.end(); ++t) {
-            int loc = t->loc;
-            int len = t->val.size();
-            if (last_loc == loc) {
-                continue;//去掉重复替换的部分如析构函数这种
+        if (hash) {
+            for (auto t = to_be_replace.begin(); t != to_be_replace.end(); ++t) {
+                int loc = t->loc;
+                int len = t->val.size();
+                if (last_loc == loc) {
+                    continue;//去掉重复替换的部分如析构函数这种
+                }
+                last_loc = loc;
+                std::string v_old = t->val;
+                std::string v_new = RE_HEADER + Util::hash(v_old);
+                //先删除
+                code.replace(loc+loc_sum-1, len, v_new);
+                loc_sum += v_new.size() - v_old.size(); 
+                
+                //code.insert(loc+len+loc_sum-1, REPLACE);
+                //loc_sum += REPLACE.length();
             }
-            last_loc = loc;
-            code.insert(loc+len+loc_sum-1, REPLACE);
-            loc_sum += REPLACE.length();
+        } else {
+            for (auto t = to_be_replace.begin(); t != to_be_replace.end(); ++t) {
+                int loc = t->loc;
+                int len = t->val.size();
+                if (last_loc == loc) {
+                    continue;//去掉重复替换的部分如析构函数这种
+                }
+                last_loc = loc;
+                code.insert(loc+len+loc_sum-1, REPLACE);
+                loc_sum += REPLACE.length();
+            }
         }
 
         std::ofstream out(file_path, std::ios::out);

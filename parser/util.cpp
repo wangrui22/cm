@@ -1,7 +1,7 @@
 #include "util.h"
 #include <map>
 #include <iostream>
-
+#include "mbedtls/md5.h"
 #include <boost/filesystem.hpp>
 
 namespace {
@@ -102,4 +102,29 @@ std::string Util::get_file_name(const std::string& path) {
 
 bool Util::is_direction(const std::string& path) {
     return boost::filesystem::is_directory(path);
+}
+
+std::string Util::hash(const std::string& data) {
+    char hex_str[32];
+    assert(!data.empty());
+
+    unsigned char byte_array[16] = { 0 };
+    mbedtls_md5((unsigned char*)(data.c_str()), data.length(), byte_array);
+    int j = 0;
+    int tmp = 0;
+    for (int i = 0; i < 16; ++i) {
+        tmp = byte_array[i];
+        hex_str[j++] = (tmp >> 4) & 0x0f; 
+        hex_str[j++] = tmp & 0x0f;
+    }
+    assert(j == 32);
+    for (int i = 0; i < 32; ++i) { 
+        if (hex_str[i] < 10) {
+            hex_str[i] = '0' + hex_str[i];
+        } else {
+            hex_str[i] = 'a' + (hex_str[i]-10);
+        }
+    }
+
+    return std::string(hex_str, 32);
 }

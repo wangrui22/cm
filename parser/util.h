@@ -14,6 +14,8 @@ public:
     static std::string get_file_name(const std::string& path);
 
     static bool is_direction(const std::string& path);
+
+    static std::string hash(const std::string& val);
 };
 
 #endif

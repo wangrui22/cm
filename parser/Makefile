@@ -8,7 +8,7 @@ endif
 all: l1
 
 l1: parser.o main.o util.o
-	g++ -std=c++11 $(CFLAGS) -o l1 main.o parser.o util.o -lpthread -lboost_system -lboost_filesystem -lboost_thread
+	g++ -std=c++11 $(CFLAGS) -o l1 main.o parser.o util.o -lpthread -lboost_system -lboost_filesystem -lboost_thread -lmbedcrypto -lmbedtls -lmbedx509 
 
 main.o: main.cpp parser.o util.o
 	g++ -std=c++11 $(CFLAGS) -c main.cpp
