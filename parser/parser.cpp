@@ -3057,7 +3057,7 @@ void ParserGroup::extract_class_member (
     ++t;
 }
 
-void ParserGroup::extract_class2() {
+void ParserGroup::extract_class_member() {
     //1 抽取成员变量, 细化成员函数的返回值
     int idx = 0;
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
@@ -3202,8 +3202,76 @@ void ParserGroup::extract_class2() {
         _g_class_fn_with_base[it->first] = fns;
         _g_class_variable_with_base[it->first] = vs;
     }
+
+    //4 构造包含基类的ignore class function 超集
+    std::function<bool(const std::string& c_name, const std::string& fn_name)> check_fn_virtual = [this](const std::string& c_name, const std::string& fn_name)->bool {
+        auto fns = _g_class_fn.find(c_name);
+        if (fns != _g_class_fn.end()) {
+            for (auto fn = fns->second.begin(); fn != fns->second.end(); ++fn) {
+                if (fn->fn_name == fn_name && fn->is_virtual) {
+                    return true;
+                }
+            } 
+        }
+        return false;
+    };
+
+    std::function<void(const std::string& c_name, const std::string& fn_name)> add_ig_fn = [this](const std::string& c_name, const std::string& fn_name) {
+        auto c_childs = _g_class_childs.find(c_name);
+        if (c_childs == _g_class_childs.end()) {
+            return;
+        }
+        for (auto c_child = c_childs->second.begin(); c_child != c_childs->second.end(); ++c_child) {
+            const std::string cc_name = c_child->first;
+            if (_ignore_c_fn_name_ext.find(cc_name) == _ignore_c_fn_name_ext.end()) {
+                _ignore_c_fn_name_ext[cc_name] = std::set<std::string>();
+            }
+            _ignore_c_fn_name_ext[cc_name].insert(fn_name);
+        }
+    };
+
+    for (auto it = _ignore_c_fn_name.begin(); it != _ignore_c_fn_name.end(); ++it) {
+        const std::string& c_name = it->first;
+        const std::set<std::string>& c_f_names = it->second;
+        _ignore_c_fn_name_ext[c_name] = c_f_names;
+        for (auto it2 = c_f_names.begin(); it2 != c_f_names.end(); ++it2) {
+            const std::string fn_name = *it2;
+            bool is_virtual = true;//check_fn_virtual(c_name, fn_name);
+            if (is_virtual) {
+                //把派生类的同名函数都添加到ignore集合中
+                add_ig_fn(c_name, fn_name);
+            }
+        }
+    }
     
 }
+
+// bool ParserGroup::is_ignore_class_function(const std::string& c_name, const std::string& fn_name) {
+//     bool ig = is_ignore_class_function_direct(c_name, fn_name);
+//     if (ig) {
+//         return ig;
+//     }
+
+//     bool is_virtual = false;
+//     auto it_fn = _g_class_fn_with_base.find(c_name);
+//     if (it_fn != _g_class_fn_with_base.end()) {
+//         std::vector<ClassFunction> fns = it_fn->second;
+//         for (auto it = fns.begin(); it != fns.end(); ++it) {
+//             if (it->fn_name == fn_name){
+//                 is_virtual = it->is_virtual;
+//                 break;
+//             }
+//         }
+//     }
+//     if (is_virtual) {
+//         //虚函数, 则只要是基类被ignore了派生类也自然是ignore的
+//         _g_class_bases.find(c_name);
+//     }
+
+//     for (auto)
+    
+// }
+
 
 void ParserGroup::extract_global_var_fn() {
     //只在h文件中找
@@ -4466,7 +4534,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
             if (is_in_class_struct(class_name, tm)) {
                 if(is_member_function(class_name, fn_name, ret)) {
                     std::cout << "is member fn\n";
-                    return !tm && !is_3th_base(class_name) && !is_ignore_class(class_name);
+                    return !tm && !is_3th_base(class_name) && !is_ignore_class(class_name) && !is_ignore_class_function(class_name, fn_name);
                 }
             } 
         }
@@ -4540,7 +4608,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
             if (tm) {
                return false; 
             } else {
-                return !is_3th_base(t_type.val) && !is_ignore_class(t_type.val);
+                return !is_3th_base(t_type.val) && !is_ignore_class(t_type.val) && !is_ignore_class_function(t_type.val, fn_name);
             }
         } else {
             return false;
@@ -4884,7 +4952,8 @@ void ParserGroup::replace_call(bool hash) {
             } else if (t->type == CPP_MEMBER_FUNCTION && t->val != "operator") {
                 assert(!t->subject.empty());
                 bool tm=false;
-                if (is_in_class_struct(t->subject, tm) && !tm && !is_3th_base(t->subject) && !is_ignore_class(t->subject)) {
+                if (is_in_class_struct(t->subject, tm) && !tm && !is_3th_base(t->subject) &&
+                 !is_ignore_class(t->subject) && !is_ignore_class_function(t->subject, t->val)) {
                     to_be_replace.push_back(*t);
                 }
             }
@@ -4955,12 +5024,16 @@ static inline void print_token(const Token& t, std::ostream& out) {
     }
 }
 
-void ParserGroup::set_ignore_class(std::set<std::string> c_names) {
+void ParserGroup::set_ignore_class(const std::set<std::string>& c_names) {
     _ignore_c_name = c_names;
 }
 
-void ParserGroup::set_ignore_function(std::set<std::string> fn_names) {
+void ParserGroup::set_ignore_function(const std::set<std::string>& fn_names) {
     _ignore_fn_name = fn_names;
+}
+
+void ParserGroup::set_ignore_class_function(const std::map<std::string, std::set<std::string>>& c_fn_name) {
+    _ignore_c_fn_name = c_fn_name;
 }
 
 bool ParserGroup::is_ignore_class(const std::string& c_name) {
@@ -4971,6 +5044,15 @@ bool ParserGroup::is_ignore_class(const std::string& c_name) {
 bool ParserGroup::is_ignore_function(const std::string& fn_name) {
     const bool ig = _ignore_fn_name.find(fn_name) != _ignore_fn_name.end();
     return ig;
+}
+
+bool ParserGroup::is_ignore_class_function(const std::string& c_name, const std::string& fn_name) {
+    auto it = _ignore_c_fn_name_ext.find(c_name);
+    if (it != _ignore_c_fn_name_ext.end()) {
+        return it->second.find(fn_name) != it->second.end();
+    }
+
+    return false;
 }
 
 void ParserGroup::debug(const std::string& debug_out) {
@@ -5093,6 +5175,10 @@ void ParserGroup::debug(const std::string& debug_out) {
                     out << "protected"; 
                 } else {
                     out << "private"; 
+                }
+
+                if (cf.is_virtual) {
+                    out << "\t virtual";
                 }
 
                 out << "\t ret: ";
@@ -5470,3 +5556,4 @@ bool ParserGroup::is_3th_base(const std::string& name) {
 
     return false;
 }   
+

@@ -1,0 +1,18 @@
+#in marcon or template call
+FileUtil::make_direction
+FileUtil::check_direction
+IOperation::create
+IOperation::set_op_name
+GLUtils::log_gl_error
+GLObject::initialize
+GLObject::finalize
+GLObject::memory_used
+GLObject::set_description
+GLObject::get_description
+GLObjectShieldBase::shield
+CudaObject::initialize
+CudaObject::finalize
+CudaObject::memory_used
+CudaObject::set_description
+CudaObject::get_description
+MySQLDB::try_connect

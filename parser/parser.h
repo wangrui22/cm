@@ -64,8 +64,9 @@ public:
 
     void add_parser(const std::string& file_name, const std::string& file_path, Parser* parser, Reader* reader);
     Parser* get_parser(const std::string& file_name);
-    void set_ignore_class(std::set<std::string> c_name);
-    void set_ignore_function(std::set<std::string> fn_name);
+    void set_ignore_class(const std::set<std::string>& c_name);
+    void set_ignore_function(const std::set<std::string>& fn_name);
+    void set_ignore_class_function(const std::map<std::string, std::set<std::string>>& c_fn_name);
 
     //按顺序调用
     void remove_comments();
@@ -77,7 +78,7 @@ public:
     void extract_decltype();
     void extract_container();
     void combine_type_with_multi_and_rm_const();
-    void extract_class2();
+    void extract_class_member();
     void extract_global_var_fn();
     void extract_local_var_fn();
 
@@ -110,6 +111,7 @@ private:
 
     bool is_ignore_class(const std::string& c_name);
     bool is_ignore_function(const std::string& fn_name);
+    bool is_ignore_class_function(const std::string& c_name, const std::string& fn_name);
 
     void extract_class(
         std::deque<Token>::iterator& t, 
@@ -211,6 +213,8 @@ private:
 
     std::set<std::string> _ignore_c_name;
     std::set<std::string> _ignore_fn_name;
+    std::map<std::string, std::set<std::string>> _ignore_c_fn_name;
+    std::map<std::string, std::set<std::string>> _ignore_c_fn_name_ext;
 
     std::vector<Token> _g_marco;//全局宏定义
     std::map<std::string, ClassType> _g_class;//全局class struct

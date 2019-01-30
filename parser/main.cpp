@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <deque>
+#include <boost/algorithm/string.hpp>
 
 #include "util.h"
 
@@ -15,7 +16,7 @@ static int get_source_files(std::vector<std::string>& files) {
     }
     std::string line;
     while(std::getline(in, line)) {
-        if (!line.empty()) {
+        if (!line.empty() && line[0] != '#') {
             files.push_back(line);
         }
     }
@@ -33,7 +34,7 @@ static int get_ignore_file_name(std::vector<std::string>& files) {
     }
     std::string line;
     while(std::getline(in, line)) {
-        if (!line.empty()) {
+        if (!line.empty() && line[0] != '#') {
             files.push_back(line);
         }
     }
@@ -51,7 +52,7 @@ static int get_ignore_class_name(std::set<std::string>& names) {
     }
     std::string line;
     while(std::getline(in, line)) {
-        if (!line.empty()) {
+        if (!line.empty() && line[0] != '#') {
             names.insert(line);
         }
     }
@@ -69,8 +70,35 @@ static int get_ignore_function_name(std::set<std::string>& names) {
     }
     std::string line;
     while(std::getline(in, line)) {
-        if (!line.empty()) {
+        if (!line.empty() && line[0] != '#') {
             names.insert(line);
+        }
+    }
+
+    in.close();
+
+    return 0;
+}
+
+static int get_ignore_class_function_name(std::map<std::string,std::set<std::string>>& c_fn_names) {
+    std::ifstream in("./ignore_class_function", std::ios::in);
+    if (!in.is_open()) {
+        std::cerr << "open config ignore failed.\n";  
+        return -1;
+    }
+    std::string line;
+    while(std::getline(in, line)) {
+        if (!line.empty()) {
+            std::vector<std::string> vals;
+            boost::split(vals, line, boost::is_any_of("::"));
+            if (vals.size() == 3) {
+                const std::string c_name = vals[0];
+                const std::string fn_name = vals[2];
+                if (c_fn_names.find(c_name) == c_fn_names.end()) {
+                    c_fn_names[c_name] = std::set<std::string>();
+                }
+                c_fn_names[c_name].insert(fn_name);
+            }
         }
     }
 
@@ -89,6 +117,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> ig_file;
     std::set<std::string> ig_class;
     std::set<std::string> ig_fn;
+    std::map<std::string,std::set<std::string>> ig_c_fn_names;
 
     if (0 != get_source_files(src_dir)) {
         return -1;
@@ -103,6 +132,10 @@ int main(int argc, char* argv[]) {
     }
 
     if (0 != get_ignore_function_name(ig_fn)) {
+        return -1;
+    }
+
+    if (0 != get_ignore_class_function_name(ig_c_fn_names)) {
         return -1;
     }
 
@@ -194,6 +227,7 @@ int main(int argc, char* argv[]) {
 
     parser_group.set_ignore_class(ig_class);
     parser_group.set_ignore_function(ig_fn);
+    parser_group.set_ignore_class_function(ig_c_fn_names);
 
     parser_group.remove_comments();
     parser_group.extract_enum();
@@ -205,7 +239,7 @@ int main(int argc, char* argv[]) {
     parser_group.extract_decltype();
     parser_group.extract_container();
     parser_group.combine_type_with_multi_and_rm_const();
-    parser_group.extract_class2();
+    parser_group.extract_class_member();
     parser_group.extract_global_var_fn();
     parser_group.extract_local_var_fn();
     parser_group.label_call();
