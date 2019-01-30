@@ -1,18 +1,15 @@
-#in marcon or template call
+#in marco
 FileUtil::make_direction
 FileUtil::check_direction
+
+#marco
 IOperation::create
 IOperation::set_op_name
+
+#marco
 GLUtils::log_gl_error
-GLObject::initialize
-GLObject::finalize
-GLObject::memory_used
-GLObject::set_description
-GLObject::get_description
-GLObjectShieldBase::shield
-CudaObject::initialize
-CudaObject::finalize
-CudaObject::memory_used
-CudaObject::set_description
-CudaObject::get_description
+CudaUtils::log_cuda_error
+
+#marco
 MySQLDB::try_connect
+MySQLDB::connect

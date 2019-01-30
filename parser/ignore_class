@@ -1,3 +1,36 @@
+#gl resource wrapper
+GLObject
+GLTextureBase
+GLTexture1D
+GLTexture2D
+GLTexture3D
+GLTexture1DArray
+GLBuffer
+GLVAO
+GLFBO
+GLProgram
+GLTimeQuery
+GLUtils
+XGLContext
+GLContext
+GLObjectShieldBase
+
+#cuda resource wrapper
+CudaObject
+CudaTextureBase
+CudaTexture1D
+CudaTexture2D
+CudaTexture3D
+CudaGLTexture2D
+CudaTexture1DArray
+CudaGlobalMemory
+CudaGLBuffer
+CudaSurfaceBase
+CudaSurface2D
+CudaSurface3D
+CudaTimeQuery
+CudaUtils
+
 ##cuda kernel used
 VolumeBrickInfo
 MaskBrickInfo
