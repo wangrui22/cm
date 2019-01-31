@@ -1,12 +1,8 @@
-#include "parser.h"
-#include <iostream>
-#include <fstream>
-#include <deque>
 #include <boost/algorithm/string.hpp>
-
+#include "obfuscator.h"
 #include "util.h"
 
-ParserGroup parser_group;
+Obfuscator obfuscator;
 
 static int get_source_files(std::vector<std::string>& files) {
     std::ifstream in("./file_source", std::ios::in);
@@ -108,10 +104,10 @@ static int get_ignore_class_function_name(std::map<std::string,std::set<std::str
 }
 
 int main(int argc, char* argv[]) {
-    // if (argc != 3) {
-    //     std::cout << "invalid arguments.\n";
-    //     return -1;
-    // }
+    bool hash = false;
+    if (argc >= 2 && std::string(argv[1]) == "hash") {
+        hash = true;
+    } 
 
     std::vector<std::string> src_dir;
     std::vector<std::string> ig_file;
@@ -161,7 +157,6 @@ int main(int argc, char* argv[]) {
             Util::get_all_file_recursion(src_dir[j], post,  h_file);
 
             std::set<std::string> post2;
-            post.insert(".cu");
             post2.insert(".cpp");
         
             Util::get_all_file_recursion(src_dir[j], post2,  c_file);
@@ -177,22 +172,22 @@ int main(int argc, char* argv[]) {
 
             Reader* reader = new Reader();
             reader->read(h_file[i]);
-            Parser* parser = new Parser();
-            parser->set_reader(reader);
+            Lex* lex = new Lex();
+            lex->set_reader(reader);
             while(true) {
-                parser->push_token(parser->lex(reader));
+                lex->push_token(lex->lex(reader));
                 if (reader->eof()) {
                     break;
                 }
             }
 
-            parser->stage_token();
-            parser->f1();
-            parser->f2();
+            lex->stage_token();
+            lex->l1();
+            lex->l2();
 
             std::string file_name = Util::get_file_name(h_file[i]);
 
-            parser_group.add_parser(file_name, h_file[i], parser, reader);
+            obfuscator.add_lex(file_name, h_file[i], lex, reader);
         }
 
         for (size_t i=0; i<c_file.size(); ++i) {
@@ -205,49 +200,49 @@ int main(int argc, char* argv[]) {
 
             Reader* reader = new Reader();
             reader->read(c_file[i]);
-            Parser* parser = new Parser();
-            parser->set_reader(reader);
+            Lex* lex = new Lex();
+            lex->set_reader(reader);
 
             while(true) {
-                parser->push_token(parser->lex(reader));
+                lex->push_token(lex->lex(reader));
                 if (reader->eof()) {
                     break;
                 }
             }
 
-            parser->stage_token();
+            lex->stage_token();
 
-            parser->f1();
-            parser->f2();
+            lex->l1();
+            lex->l2();
 
             std::string file_name = Util::get_file_name(c_file[i]);
 
-            parser_group.add_parser(file_name, c_file[i], parser, reader);
+            obfuscator.add_lex(file_name, c_file[i], lex, reader);
         }
     }
 
-    parser_group.set_ignore_class(ig_class);
-    parser_group.set_ignore_function(ig_fn);
-    parser_group.set_ignore_class_function(ig_c_fn_names);
+    obfuscator.set_ignore_class(ig_class);
+    obfuscator.set_ignore_function(ig_fn);
+    obfuscator.set_ignore_class_function(ig_c_fn_names);
 
-    parser_group.remove_comments();
-    parser_group.extract_enum();
-    parser_group.parse_marco();
-    parser_group.extract_extern_type();
-    parser_group.extract_class();
-    parser_group.extract_typedef();
-    parser_group.combine_type_with_multi_and_rm_const();
-    parser_group.extract_decltype();
-    parser_group.extract_container();
-    parser_group.combine_type_with_multi_and_rm_const();
-    parser_group.extract_class_member();
-    parser_group.extract_global_var_fn();
-    parser_group.extract_local_var_fn();
-    parser_group.label_call();
-    parser_group.label_fn_as_parameter();
-    parser_group.replace_call(true);
+    obfuscator.remove_comments();
+    obfuscator.extract_enum();
+    obfuscator.parse_marco();
+    obfuscator.extract_extern_type();
+    obfuscator.extract_class();
+    obfuscator.extract_typedef();
+    obfuscator.combine_type_with_multi_and_rm_const();
+    obfuscator.extract_decltype();
+    obfuscator.extract_container();
+    obfuscator.combine_type_with_multi_and_rm_const();
+    obfuscator.extract_class_member();
+    obfuscator.extract_global_var_fn();
+    obfuscator.extract_local_var_fn();
+    obfuscator.label_call();
+    obfuscator.label_fn_as_parameter();
+    obfuscator.replace_call(hash);
     
-    parser_group.debug("./result");
+    obfuscator.debug("./result");
 
     return 0;
 }

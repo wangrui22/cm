@@ -3,9 +3,17 @@
 
 #include <string>
 #include <ostream>
+#include <iostream>
+#include <fstream>
+#include <sstream>
 #include <vector>
 #include <stack>
 #include <deque>
+#include <set>
+#include <map>
+#include <cassert>
+#include <functional>
+#include <algorithm>
 
 enum TokenType {
     CPP_EQ = 0, // =
@@ -83,7 +91,6 @@ enum TokenType {
     CPP_OPEN_ANGLE, //<
     CPP_CLOSE_ANGLE, //>
     CPP_CLASS, // 类名
-    CPP_STURCT, // 结构体名
 
     /*
     if
@@ -195,136 +202,6 @@ struct ScopeType {
 
 const static std::string ANONYMOUS_SCOPE = "0anonymous_scope0";
 const static std::string THIRD_CLASS = "3th";
-
-static const char* keywords[] = {
-"alignas",
-"alignof",
-"and",
-"and_eq",
-"asm",
-"auto",
-"bitand",
-"bitor",
-"bool",
-"break",
-"case",
-"catch",
-"char",
-"char8_t",
-"char16_t",
-"char32_t",
-"class",
-"compl",
-"concept",
-"const",
-"constexpr",
-"const_cast",
-"continue",
-"decltype",
-"default",
-"delete",
-"do",
-"double",
-"dynamic_cast",
-"else",
-"enum",
-"explicit",
-"export",
-"extern",
-"false",
-"float",
-"for",
-"friend",
-"goto",
-"if",
-"inline",
-"int",
-"long",
-"mutable",
-"namespace",
-"new",
-"noexcept",
-"not",
-"not_eq",
-"nullptr",
-"operator",
-"or",
-"or_eq",
-"private",
-"protected",
-"public",
-"register",
-"reinterpret_cast",
-"return",
-"short",
-"signed",
-"sizeof",
-"static",
-"static_assert",
-"static_cast",
-"struct",
-"switch",
-"template",
-"this",
-"thread_local",
-"throw",
-"true",
-"try",
-"typedef",
-"typeid",
-"typename",
-"union",
-"unsigned",
-"using",
-"virtual",
-"void",
-"volatile",
-"wchar_t",
-"while",
-"xor",
-"xor_eq"
-};
-
-static const char* types[] = {
-"unsigned",
-"char",
-"unsigned char",
-"short",
-"unsigned short",
-"int",
-"unsigned int",
-"long",
-"unsigned long",
-"long long",
-"unsigned long long",
-"long int",
-"unsigned long int",
-"long long int",
-"unsigned long long int",
-"int8_t",
-"int16_t",
-"int32_t",
-"int64_t",
-"uint8_t",
-"uint16_t",
-"uint32_t",
-"uint64_t",
-"float",
-"double",
-"bool",
-"size_t",
-"void",
-"auto",
-"Sint8",//DCMTK typedef 
-"Uint8",
-"Sint32",
-"Uint32",
-"Uint16",
-"Float32",
-"Float64",
-"__m128",
-"__m128i",
-};
 
 inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
     switch(t) {
@@ -514,9 +391,6 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
         case CPP_CLASS:
             out << "class";
             break;
-        case CPP_STURCT:
-            out << "sturct";
-            break;
         case CPP_BR: 
             out << "br";
             break;
@@ -551,6 +425,7 @@ inline std::ostream& operator << (std::ostream& out, const TokenType& t) {
             out << "INVALID";
             break;    
     }
+    return out;
 }   
 
 #endif

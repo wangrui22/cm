@@ -1,23 +1,31 @@
-ver = debug
-ifeq ($(ver), release)
-CFLAGS += -O3
+CC = g++ -std=c++11
+
+ver = release
+ifeq ($(ver), debug)
+CFLAGS += -Wall -g
 else
-CFLAGS += -g
+CFLAGS += -Wall -O3
 endif
 
 all: l1
 
-l1: parser.o main.o util.o
-	g++ -std=c++11 $(CFLAGS) -o l1 main.o parser.o util.o -lpthread -lboost_system -lboost_filesystem -lboost_thread -lmbedcrypto -lmbedtls -lmbedx509 
+l1: main.o obfuscator.o lex.o util.o
+	$(CC) $(CFLAGS) -o l1 main.o lex.o obfuscator.o util.o \
+	-lmbedcrypto -lmbedtls -lmbedx509 \
+	-lpthread -lboost_system -lboost_filesystem -lboost_thread
+	
 
-main.o: main.cpp parser.o util.o
-	g++ -std=c++11 $(CFLAGS) -c main.cpp
+main.o: main.cpp lex.o obfuscator.o util.o
+	$(CC) $(CFLAGS) -c main.cpp
 
-parser.o: parser.cpp parser.h common.h util.o
-	g++ -std=c++11 $(CFLAGS) -c parser.cpp
+lex.o: lex.cpp lex.h common.h util.o
+	$(CC) $(CFLAGS) -c lex.cpp
+
+obfuscator.o: obfuscator.cpp obfuscator.h common.h util.o lex.o
+	$(CC) $(CFLAGS) -c obfuscator.cpp
 
 util.o: util.cpp util.h
-	g++ -std=c++11 $(CFLAGS) -c util.cpp
+	$(CC) $(CFLAGS) -c util.cpp
 
 .PHONY: clean
 

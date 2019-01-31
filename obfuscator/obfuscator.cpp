@@ -1,830 +1,5 @@
-#include "parser.h"
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <cassert>
-#include <stack>
-#include <functional>
-#include <algorithm>
+#include "obfuscator.h"
 #include "util.h"
-
-static inline void print_token(const Token& t, std::ostream& out);
-
-Reader::Reader() {
-
-}
-
-Reader::~Reader() {
-
-}
-
-int Reader::read(const std::string& file) {
-    _file_path = file;
-    std::ifstream in(file, std::ios::in);
-    if (in.is_open()) {
-        std::stringstream ss;
-        ss << in.rdbuf();
-        _file_str = ss.str();   
-        in.close();
-        _cur_line = 0;
-        _cur_loc = 0;
-        return 0;
-    } else {
-        return -1;
-    }
-}
-
-const std::string& Reader::get_file_path() {
-    return _file_path;
-}
-
-char Reader::cur_char() {
-    return _file_str[_cur_loc];
-}
-
-char Reader::next_char() {
-    if (this->eof()) {
-        return '\n';
-    }
-
-    char t = _file_str[_cur_loc++];
-    if (t == '\n') {
-        ++_cur_line;
-    }
-    return t;
-}
-
-char Reader::pre_char() {
-    if (_cur_loc == 0) {
-        return '\n';
-    }
-
-    char t = _file_str[--_cur_loc];
-    if (t == '\n') {
-        --_cur_line;
-    }
-    return t;
-}
-
-int Reader::get_cur_line() const {
-    return _cur_line;
-}
-
-int Reader::get_cur_loc() const {
-    return _cur_loc;
-}
-
-void Reader::next_line() {
-    while(_file_str[++_cur_loc] != '\n' && !this->eof()) {}
-}
-
-bool Reader::eof() const {
-    const int len = (int)_file_str.length()-1;
-    return _cur_loc > len;
-}
-
-std::string Reader::get_string(int loc, int len) {
-    assert(loc+len < _file_str.length());
-    return _file_str.substr(loc, len);
-}
-
-void Reader::skip_white() {
-    if (eof()) {
-        return;
-    }
-
-    char c = _file_str[_cur_loc];
-    if (c==' ' || c=='\t' || c=='\f' || c=='\v' || c=='\0') {
-        ++_cur_loc;
-        skip_white();
-    }
-}
-
-static inline bool is_num(char c) {
-    return c >= '0' && c <='9';
-}
-
-//十进制和八进制
-static inline Token lex_number(char c, Reader* cpp_reader, Token& token,  int per_status) {
-    // *.*E(e)*
-    //-------------------DFA-----------------//
-    //      | 0 | 1 |(2)| 3 |(4)| 5 | 6 |(7)|
-    //  +/- | 1 |   |   |   |   | 6 |   |   |
-    // digit| 2 | 2 | 2 | 4 | 4 | 7 | 7 | 7 |
-    //  E/e |   |   | 5 |   | 5 |   |   |   |
-    //   .  |   |   | 3 |   |   |   |   |   |
-    const static char DFA[4][8] = {
-        1,-1,-1,-1,-1,6,-1,-1,
-        2,2,2,4,4,7,7,7,
-        -1,-1,5,-1,5,-1,-1,-1,
-        -1,-1,3,-1,5,-1,-1,-1
-    };
-    //-------------------DFA-----------------//
-
-    int input = -1;
-    if (is_num(c)) {
-        input = 1;
-    } else if (c == '+' || c == '-') {
-        input = 0;
-    } else if (c== '.') {
-        input = 3;
-    } else if (c=='e' || c== 'E') {
-        input = 2;
-    }
-
-    if (-1 == input) {
-        if (!cpp_reader->eof()) {
-            cpp_reader->pre_char();
-        }
-        if (per_status == 2 || per_status == 4 || per_status == 7) {
-            if (c == 'f' || c == 'L' || c == 'U') {
-                //f的尾注
-                token.val += c;
-            }
-            return token;
-        } else {
-            token.type = CPP_OTHER;
-            return token;
-        }
-    }
-    token.val += c;
-
-    int next_status = DFA[input][per_status];
-    return lex_number(cpp_reader->next_char(), cpp_reader, token, next_status);
-}
-
-//十进制和八进制
-static inline Token lex_hex(char c, Reader* cpp_reader, Token& token,  int per_status) {
-    // 0x(0~9|a~f|A-F)
-    //-------------------DFA-----------------//
-    //             | 0 | 1 | 2 |(3)|
-    //     0       | 1 |   |   |
-    //    x/X      |   | 2 |   |
-    // 0~9 a~f A~F |   |   | 3 | 3
-    const static char DFA[3][4] = {
-        1,-1,-1,-1,
-        -1,2,-1,-1,
-        -1,-1,3,3
-    };
-    //-------------------DFA-----------------//
-
-    int input = -1;
-    if (per_status == 0 && '0' ==  c) {
-        input = 0;
-    } else if (c == 'x' || c == 'X') {
-        input = 1;
-    } else if ((c >= '0' && c <= '9') || (c >= 'A' && c <='F') || (c >= 'a' && c <='f')) {
-        input = 2;
-    }
-
-    if (-1 == input) {
-        if (!cpp_reader->eof()) {
-            cpp_reader->pre_char();
-        }
-        if (per_status == 3) {
-            return token;
-        } else {
-            token.type = CPP_OTHER;
-            return token;
-        }
-    }
-    token.val += c;
-
-    int next_status = DFA[input][per_status];
-    return lex_hex(cpp_reader->next_char(), cpp_reader, token, next_status);
-} 
-
-static inline bool is_letter(char c) {
-    return (c>='a' && c <='z') || (c>='A' && c <='Z');
-}
-
-static inline Token lex_identifier(char c, Reader* cpp_reader, Token& token,  int per_status) {
-    //-------------------DFA-----------------//
-    //       | 0 | 1 |(2)|
-    //  _    | 1 | 1 | 2 |
-    // letter| 2 | 2 | 2 |
-    // number|-1 | 2 | 2 |
-    const static char DFA[3][3] = {
-        1,1,2,
-        2,2,2,
-        -1,2,2
-    };
-    //-------------------DFA-----------------//
-    int input = -1;
-    if (is_letter(c)) {
-        input = 1;
-    } else if (c == '_') {
-        input = 0;
-    } else if (is_num(c)) {
-        input = 2;
-    }
-
-    if (-1 == input) {
-        if (!cpp_reader->eof()) {
-            cpp_reader->pre_char();
-        }
-        if (per_status == 2) {
-            for (int i=0; i<sizeof(keywords)/sizeof(char*); ++i) {
-                if (token.val == keywords[i]) {
-                    token.type = CPP_KEYWORD;
-                    break;
-                }
-            }
-            return token;
-        } else {
-            token.type = CPP_OTHER;
-            return token;
-        }
-    }
-    token.val += c;
-
-    int next_status = DFA[input][per_status];
-    return lex_identifier(cpp_reader->next_char(), cpp_reader, token, next_status);
-}
-
-static inline Token lex_comment(char c, Reader* cpp_reader, Token& token, int per_status) {
-    //-------------------DFA-----------------//
-    //       | 0 | 1 | 2 | 3 |(4)|
-    //  /    | 1 |-1 | 2 | 4 |-1 |
-    //  *    |-1 | 2 | 3 | 3 |-1 |
-    // other |-1 |-1 | 2 | 2 |-1 |
-    const static char DFA[3]/*  */[5] = {
-        1,-1,2,4,-1,
-        -1,2,3,3,-1,
-        -1,-1,2,2,-1
-    };
-    //-------------------DFA-----------------//
-
-    int input = -1;
-    if (c == '/') {
-        input = 0;
-    } else if (c == '*') {
-        input = 1;
-    } else {
-        input = 2;
-    }
-
-
-    token.val += c;
-
-    int next_status = DFA[input][per_status];
-    if (next_status == 4) {
-        return token;
-    } else {
-        return lex_comment(cpp_reader->next_char(), cpp_reader, token, next_status);
-    }
-}
-
-static inline Token lex_string(char c , Reader* cpp_reader, Token& token, int per_status) {
-    //-------------------DFA-----------------//
-    //       | 0 | 1 | 2 
-    //  "    | 1 | 2 | 
-    // other |-1 | 1 | 
-    const static char DFA[2][3] = {
-        1,2,-1,
-        -1,1,-1
-    };
-    //-------------------DFA-----------------//
-
-    int input = -1;
-    if (c == '\"') {
-        if (token.val[token.val.length()-1] == '\\') {
-            if (token.val.length() > 2 && token.val[token.val.length()-2] == '\\') {
-                input = 0;//出现了 \\"
-            } else {
-                input = 1; //出现了 \"
-            }
-        } else {
-            input = 0;
-        }
-    } else {
-        input = 1;
-    }
-
-    token.val += c;
-
-    int next_status = DFA[input][per_status];
-    if (next_status == 2) {
-        return token;
-    } else {
-        return lex_string(cpp_reader->next_char(), cpp_reader, token, next_status);
-    }
-}
-
-Parser::Parser() {
-
-}
-
-Parser::~Parser() {
-
-}
-
-void Parser::set_reader(Reader* reader) {
-    _reader = reader;
-}
-
-void Parser::stage_token() {
-    _stage_ts = _ts;
-}
-
-Token Parser::lex(Reader* cpp_reader) {
-    if (cpp_reader->eof()) {
-        return {CPP_EOF,"",0};
-    }
-
-    char c = cpp_reader->next_char();
-    switch(c) {
-        case '\n': {
-            return {CPP_BR, "br", cpp_reader->get_cur_loc()};
-            //return lex(cpp_reader);
-        }
-        case ';': {
-            return {CPP_SEMICOLON, ";", cpp_reader->get_cur_loc()};
-        }
-        //brace
-        case ' ': case '\t': case '\f': case '\v': case '\0': 
-        {
-            cpp_reader->skip_white();
-            return lex(cpp_reader);
-        }
-        case '\\': {
-            return {CPP_CONNECTOR, ";", cpp_reader->get_cur_loc()};
-        }
-        case '=': {
-            char nc = cpp_reader->next_char();
-            if (nc=='=') {
-                return {CPP_EQ_EQ, "==", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_EQ, "=", cpp_reader->get_cur_loc()};
-            }
-        }
-
-        case '!': {
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_NOT_EQ, "!=", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_NOT, "!", cpp_reader->get_cur_loc()};
-            }
-        }
-
-        case '>': {
-            char nc = cpp_reader->next_char();
-            //LABEL 运算符右移 和 模板有冲突 在语义分析的时候再解决
-            // if (nc == '>') {
-            //     return {CPP_RSHIFT, ">>", cpp_reader->get_cur_loc()-1};
-            // } else 
-            if (nc == '=')  {
-                return {CPP_GREATER_EQ, ">=", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_GREATER, ">", cpp_reader->get_cur_loc()};
-            }
-        }
-
-        case '<': {
-            char nc = cpp_reader->next_char();
-            if (nc == '<') {
-                return {CPP_LSHIFT, "<<", cpp_reader->get_cur_loc()-1};
-            } else if (nc == '=')  {
-                return {CPP_LESS_EQ, "<=", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_LESS, "<", cpp_reader->get_cur_loc()};
-            }
-        }
-        //indentifer
-        case '_':
-        case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-        case 'g': case 'h': case 'i': case 'j': case 'k': case 'l':
-        case 'm': case 'n': case 'o': case 'p': case 'q': case 'r':
-        case 's': case 't': case 'u': case 'v': case 'w': case 'x':
-        case 'y': case 'z':
-        case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-        case 'G': case 'H': case 'I': case 'J': case 'K': case 'L':
-        case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R':
-        case 'S': case 'T': case 'U': case 'V': case 'W': case 'X':
-        case 'Y': case 'Z':
-        {
-            Token t  ={ CPP_NAME, "", cpp_reader->get_cur_loc()};
-            return lex_identifier(c, cpp_reader, t, 0);
-            break;
-        }
-
-        //number
-        case '0': 
-        {
-            //hex
-            char nc = cpp_reader->next_char();
-            if (nc == 'x' || nc == 'X') {
-                Token t = {CPP_NUMBER, "0x", cpp_reader->get_cur_loc()};
-                return lex_hex(cpp_reader->next_char(), cpp_reader, t, 2);    
-            } else {
-                //other number
-                cpp_reader->pre_char();
-                Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
-                return lex_number(c, cpp_reader, t, 2);
-            }
-        }
-        case '1': case '2': case '3': case '4':
-        case '5': case '6': case '7': case '8': case '9':
-        {
-            Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
-            return lex_number(c, cpp_reader, t, 2);
-        }
-
-        //char
-        case '\'': 
-        {
-            char nc = cpp_reader->next_char();
-            char nnc = cpp_reader->next_char();
-            char nnnc = cpp_reader->next_char();
-            if (nnc == '\'' && nc != '\'') {
-                cpp_reader->pre_char();
-                return {CPP_CHAR, "\'" + std::string(1,nc) + "\'", cpp_reader->get_cur_loc()-2};
-            } else if (nc == '\\' && nnnc == '\'' && nnc != '\'') {
-                return {CPP_CHAR, "\'\\" + std::string(1,nnc) + "\'", cpp_reader->get_cur_loc()-3};
-            }
-
-            cpp_reader->pre_char();
-            cpp_reader->pre_char();
-            cpp_reader->pre_char();
-            return {CPP_OTHER, "", 0};
-        }
-
-        //string
-        case '\"': 
-        { 
-            Token t = {CPP_STRING, "\"", cpp_reader->get_cur_loc()};
-            return lex_string(cpp_reader->next_char(), cpp_reader, t, 1);
-        }
-
-        case '-':
-        {
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_MINUS_EQ, "-=", cpp_reader->get_cur_loc()-1};
-            } else if (nc == '-') {
-                return {CPP_MINUS_MINUS, "--", cpp_reader->get_cur_loc()-1};
-            } else if (nc == '>') {
-                return {CPP_POINTER, "->", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_MINUS, "-", cpp_reader->get_cur_loc()};
-            }
-            //错误
-            cpp_reader->pre_char();
-            return {CPP_OTHER, "", 0};
-        }
-        case '+':
-        {
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_PLUS_EQ, "+=", cpp_reader->get_cur_loc()-1};
-            } else if (nc == '+') {
-                return {CPP_PLUS_PLUS, "++", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_PLUS, "+", cpp_reader->get_cur_loc()};
-            }
-
-            //错误
-            cpp_reader->pre_char();
-            return {CPP_OTHER, "", 0};
-        }
-        case '.': 
-        {
-            char nc = cpp_reader->next_char();
-            if (is_num(nc)) {
-                cpp_reader->pre_char();
-                Token t  ={ CPP_NUMBER, "", cpp_reader->get_cur_loc()};
-                return lex_number(c, cpp_reader, t, 2);
-            } else if (nc == '.') {
-                char nnc = cpp_reader->next_char();
-                if (nnc == '.') {
-                    return {CPP_ELLIPSIS, "...", cpp_reader->get_cur_loc()-2};
-                } else {
-                    cpp_reader->pre_char();
-                    return {CPP_OTHER, "", 0};
-                }
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_DOT, ".", cpp_reader->get_cur_loc()};
-            }
-        }
-        case '*':
-        {
-            //TODO 怎么判断是解引用还是乘号
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_MULT_EQ, "*=", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_MULT, "*", cpp_reader->get_cur_loc()};
-            }
-        }
-        case '/':
-        {
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_DIV_EQ, "/=", cpp_reader->get_cur_loc()};
-            } else if (nc == '/') {
-                //注释
-                Token t = {CPP_COMMENT, "//", cpp_reader->get_cur_loc()-1};
-                while(true) {
-                    nc = cpp_reader->next_char();
-                    if (nc == '\n' || cpp_reader->eof()) {
-                        return t;
-                    } else {
-                        t.val += nc;
-                    }
-                }
-            } else if (nc == '*') {
-                //注释
-                Token t = {CPP_COMMENT, "/*", cpp_reader->get_cur_loc()-1};
-                return lex_comment(cpp_reader->next_char(), cpp_reader, t, 2);
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_DIV, "/", cpp_reader->get_cur_loc()};
-            }
-        }
-        case '%': 
-        {
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_MOD_EQ, "%=", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_MOD, "%", cpp_reader->get_cur_loc()};
-            }
-        }
-        case '&': 
-        {
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_AND_EQ, "&=", cpp_reader->get_cur_loc()-1};
-            } else if (nc == '&') {
-                return {CPP_AND_AND, "&&", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_AND, "&", cpp_reader->get_cur_loc()};
-            }
-        } 
-        case '|': 
-        {
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_OR_EQ, "|=", cpp_reader->get_cur_loc()-1};
-            } else if (nc == '|') {
-                return {CPP_OR_OR, "||", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_OR, "|", cpp_reader->get_cur_loc()};
-            }
-        }
-        case '^': 
-        {
-            char nc = cpp_reader->next_char();
-            if (nc == '=') {
-                return {CPP_XOR_EQ, "^=", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_XOR, "^", cpp_reader->get_cur_loc()};
-            }
-        }
-        case '~': 
-        {  
-            return {CPP_COMPL, "~", cpp_reader->get_cur_loc()};
-        }
-        case '?': 
-        {
-            return {CPP_QUERY, "?", cpp_reader->get_cur_loc()};
-        }
-        case '(':
-        {
-            return {CPP_OPEN_PAREN, "(", cpp_reader->get_cur_loc()};
-        }
-        case ')':
-        {
-            return {CPP_CLOSE_PAREN, ")", cpp_reader->get_cur_loc()};
-        }
-        case '[':
-        {
-            return {CPP_OPEN_SQUARE, "[", cpp_reader->get_cur_loc()};
-        }
-        case ']':
-        {
-            return {CPP_CLOSE_SQUARE, "]", cpp_reader->get_cur_loc()};
-        }
-        case '{':
-        {
-            return {CPP_OPEN_BRACE, "{", cpp_reader->get_cur_loc()};
-        }
-        case '}':
-        {
-            return {CPP_CLOSE_BRACE, "}", cpp_reader->get_cur_loc()};
-        }        
-        case ':': 
-        {
-            char nc = cpp_reader->next_char();
-            if (nc == ':') {
-                return {CPP_SCOPE, "::", cpp_reader->get_cur_loc()-1};
-            } else {
-                cpp_reader->pre_char();
-                return {CPP_COLON, ":", cpp_reader->get_cur_loc()};
-            }
-        }
-        case ',': 
-        {
-            return {CPP_COMMA, ",", cpp_reader->get_cur_loc()};
-        }
-        case '#': {
-            return {CPP_PASTE, "#", cpp_reader->get_cur_loc()};
-        }
-
-        default:
-            //ERROR
-            return {CPP_OTHER, "", 0};
-    }
-
-    return {};
-}
-
-void Parser::push_token(const Token& t) {
-    _ts.push_back(t);
-}
-
-const std::deque<Token>& Parser::get_tokens() const {
-    return _ts;
-}
-
-static inline bool is_type(const std::string& str) {
-    for (int i=0; i<sizeof(types)/sizeof(char*); ++i) {
-        if (str == types[i]) {
-            return true;
-        }
-    }
-
-    return false;
-} 
-
-void Parser::f1() {
-    for (auto t = _ts.begin(); t != _ts.end(); ) {
-        //number sign
-        if (t->type == CPP_PLUS || t->type == CPP_MINUS) {
-            std::string sign = t->type == CPP_PLUS ? "+" : "-";
-            if (t == _ts.begin()) {
-                auto t_n = t+1;
-                if (t_n != _ts.end() && t_n->type==CPP_NUMBER) {
-                    t_n->val = sign + t_n->val;
-                    t_n->loc = t->loc;
-                    t = _ts.erase(t);
-                    continue;
-                }
-            } else {
-                auto t_n = t+1;
-                auto t_p = t-1;
-                if (t_n != _ts.end() && t_n->type==CPP_NUMBER && t_p->type != CPP_NUMBER) {
-                    t_n->val = sign + t_n->val;
-                    t_n->loc = t->loc;
-                    t = _ts.erase(t);
-                    continue;
-                }
-            }
-        }
-
-        if (t->type == CPP_PASTE) {
-            auto t_n = t+1;
-            //include header
-            if (t_n != _ts.end() && t_n->type == CPP_NAME && t_n->val == "include") {
-                auto t_nn = t_n+1;
-                if (t_nn != _ts.end() && t_nn->type == CPP_STRING) {
-                    //#include "***"
-                    t_nn->type = CPP_HEADER_NAME;
-                    t_nn->val = t_nn->val.substr(1,t_nn->val.length()-2);
-                    t_nn->loc = t->loc;
-                    t = _ts.erase(t);
-                    t = _ts.erase(t);
-                    continue;
-                } else if (t_nn != _ts.end() && t_nn->type == CPP_LESS) {
-                    //#include <***>
-                    //get >
-                    auto t_nnn = t_n+2;
-                    std::string include_str;
-                    int num_l = 0;
-                    bool got = false;
-                    while (t_nnn != _ts.end() && !got) {
-                        if (t_nnn->type != CPP_GREATER) {
-                            include_str += t_nnn->val;
-                            ++num_l;
-                            ++t_nnn;
-                            continue;
-                        } else {
-                            got = true;
-                        }
-                    }
-                    if (got) {
-                        t_nnn->type = CPP_HEADER_NAME;
-                        t_nnn->val = include_str;
-                        t_nnn->loc = t->loc;
-                        t = _ts.erase(t);//#
-                        t = _ts.erase(t);//include
-                        t = _ts.erase(t);//*.h
-                        while(num_l > 0) {
-                            t = _ts.erase(t);
-                            --num_l;
-                        }
-                        continue;
-                    }                  
-                }
-            } 
-            //preprocess
-            else if (t_n != _ts.end() && (t_n->type==CPP_NAME || t_n->type==CPP_KEYWORD)) {
-                if (t_n->val == "define" || t_n->val == "if" || t_n->val == "elif" || 
-                    t_n->val == "else" || t_n->val == "ifndef" || t_n->val == "ifdef" ||
-                    t_n->val == "pragma" || t_n->val == "error" || 
-                    t_n->val == "undef" || t_n->val == "line") {
-                    t->val = t_n->val;
-                    t->type = CPP_PREPROCESSOR;
-                    ++t;
-                    t = _ts.erase(t);//erase properssor
-                    while(t->type != CPP_EOF) {
-                        if (t->type == CPP_CONNECTOR && (t+1)->type == CPP_BR) {
-                            //erase connector and br
-                            t = _ts.erase(t);
-                            t = _ts.erase(t);
-                        } else if (t->type == CPP_BR) {
-                            break;
-                        } else {
-                            (t-1)->ts.push_back(*t);
-                            t = _ts.erase(t);
-                        }
-                    }
-                    continue;
-                } else if (t_n->val == "endif") {
-                    t->val = t_n->val;
-                    t->type = CPP_PREPROCESSOR;
-                    ++t;
-                    t = _ts.erase(t);//erase properssor
-                    continue;
-                }
-
-            }
-        }
-
-        //type
-        // if (t->type == CPP_NAME && t->val == "size_t") {
-        //     t->type = CPP_TYPE;
-        //     ++t;
-        //     continue;
-        // }
-        if ((t->type == CPP_KEYWORD || t->type == CPP_NAME) && is_type(t->val)) {
-            t->type = CPP_TYPE;
-            ++t;
-            continue;
-        }
-
-        //marco
-        // if (t->type == CPP_PASTE) {
-        //     auto t_n = t+1;
-        //     if () 
-        // }
-
-        ++t;
-    }
-}
-
-void Parser::f2() { 
-    for (auto t = _ts.begin(); t != _ts.end(); ) {
-        //conbine type
-        if (t->type == CPP_TYPE) {
-            auto t_n = t+1;
-            while(t_n!=_ts.end() && t_n->type == CPP_TYPE) {
-                t_n->val = t->val + " " + t_n->val;
-                t = _ts.erase(t);
-                t_n = t+1;
-            }
-            ++t;
-            continue;
-        }
-        //erase br
-        if (t->type == CPP_BR) {
-            t = _ts.erase(t);
-            continue;
-        }
-
-        //erase connector
-        if (t->type == CPP_CONNECTOR) {
-            t = _ts.erase(t);
-            continue;
-        }
-
-        ++t;
-    }
-}
-
 
 //------------------------------------------------------------------------------------------------------//
 //common function begin
@@ -1034,43 +209,44 @@ static inline void print_token(const Token& t, std::ostream& out) {
 }
 
 static inline bool is_source_file(const std::string& file_name) {
-    return ( (file_name.size() > 4 && file_name.substr(file_name.size()-4, 4) == ".cpp") ||
-            (file_name.size() > 3 && file_name.substr(file_name.size()-3, 3) == ".cu") );
+    // return ( (file_name.size() > 4 && file_name.substr(file_name.size()-4, 4) == ".cpp") ||
+    //         (file_name.size() > 3 && file_name.substr(file_name.size()-3, 3) == ".cu") );
+    return file_name.size() > 4 && file_name.substr(file_name.size()-4, 4) == ".cpp";
 }
 
 //------------------------------------------------------------------------------------------------------//
 //common function end
 //------------------------------------------------------------------------------------------------------//
 
-ParserGroup::ParserGroup() {
+Obfuscator::Obfuscator() {
 
 }
 
-ParserGroup::~ParserGroup() {
+Obfuscator::~Obfuscator() {
 
 }
 
-void ParserGroup::add_parser(const std::string& file_name, const std::string& file_path, Parser* parser, Reader* reader) {
+void Obfuscator::add_lex(const std::string& file_name, const std::string& file_path, Lex* lex, Reader* reader) {
 
     _file_name.push_back(file_name);
     _file_path.push_back(file_path);
-    _parsers.push_back(parser);
+    _lex.push_back(lex);
     _readers.push_back(reader);
 }
 
-Parser* ParserGroup::get_parser(const std::string& file_name) {
+Lex* Obfuscator::get_lex(const std::string& file_name) {
     for (size_t i = 0; i < _file_name.size(); ++i) {
         if (_file_name[i] == file_name) {
-            return _parsers[i];
+            return _lex[i];
         }
     }
     return nullptr;
 }
 
-void ParserGroup::remove_comments() {
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+void Obfuscator::remove_comments() {
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->type == CPP_COMMENT) {
                 t = ts.erase(t);
@@ -1081,11 +257,11 @@ void ParserGroup::remove_comments() {
     }
 }
 
-void ParserGroup::parse_marco() {
+void Obfuscator::parse_marco() {
     //l1 找纯粹的 define
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->type == CPP_PREPROCESSOR && t->val == "define") {
                 if (t == ts.begin()) {
@@ -1104,9 +280,9 @@ void ParserGroup::parse_marco() {
     } 
 
     //l2 解析所有 #ifdef else #endif 和 #ifndef else #endif 条件判断语句, 进一步抽取全局宏
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->type == CPP_PREPROCESSOR && (t->val == "ifndef" || t->val == "ifdef")) {
                 //预处理语句开始
@@ -1195,10 +371,10 @@ void ParserGroup::parse_marco() {
     //l3 把所有的name为marco的token type改成 marco
     //   并且展开带namespace的宏
     int idx = 0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
         std::string file_name = _file_name[idx++];
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end();) {
             Token tt;
             if (t->type == CPP_NAME && is_in_marco(t->val,tt)) {
@@ -1218,10 +394,10 @@ void ParserGroup::parse_marco() {
     }
 }
 
-void ParserGroup::extract_enum() {
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+void Obfuscator::extract_enum() {
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ++t) {
             if (t->type == CPP_KEYWORD && t->val == "enum" && (t+1)->type == CPP_NAME) {
                 (t+1)->type = CPP_ENUM;
@@ -1230,9 +406,9 @@ void ParserGroup::extract_enum() {
             }
         }
     }
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ++t) {
             if (_g_enum.find(t->val) != _g_enum.end()) {
                 t->type = CPP_TYPE;
@@ -1241,7 +417,7 @@ void ParserGroup::extract_enum() {
     }
 }
 
-void ParserGroup::parse_tempalte_para(
+void Obfuscator::parse_tempalte_para(
     std::deque<Token>::iterator t_begin, 
     std::deque<Token>::iterator t_end,
     std::map<std::string, Token>& paras,
@@ -1326,7 +502,7 @@ void ParserGroup::parse_tempalte_para(
     }
 }
 
-void ParserGroup::extract_class(
+void Obfuscator::extract_class(
     std::deque<Token>::iterator& t,
     std::deque<Token>::iterator t_begin, 
     std::deque<Token>::iterator &t_end, Scope scope,
@@ -1390,7 +566,6 @@ void ParserGroup::extract_class(
     //确定class 名称
     assert(t->val == "class" || t->val == "struct");
     const bool is_struct = t->val == "class" ? false : true;
-    const TokenType cur_type = t->val == "class" ? CPP_CLASS : CPP_STURCT;
     const int default_access = t->val == "class" ? 2 : 0;
             
     ++t;
@@ -1742,16 +917,16 @@ static inline void add_base(const std::map<std::string, ClassType>& cs, ClassTyp
     }
 }
 
-void ParserGroup::extract_class() {
+void Obfuscator::extract_class() {
     int idx = 0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
         std::string file_name = _file_name[idx++];
         std::cout << "extract class in: " << file_name << std::endl;
         if (file_name == "mi_sdf.cpp") {
             std::cout << "gotit";
         }
-        std::deque<Token>& ts = parser._ts;
+        std::deque<Token>& ts = lex._ts;
         std::deque<Scope> scopes;
         Scope root_scope;
         root_scope.type = 0;
@@ -1992,9 +1167,9 @@ void ParserGroup::extract_class() {
 
 
     //解析class struct 的 type
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             bool tm = false;
             if (t->type == CPP_NAME && is_in_class_struct(t->val, tm)) {
@@ -2036,11 +1211,11 @@ void ParserGroup::extract_class() {
     }
 }
 
-void ParserGroup::extract_typedef() {
+void Obfuscator::extract_typedef() {
     //抽取typedef的类型(注意作用域)
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
 
         for (auto t = ts.begin(); t != ts.end(); ) {
 
@@ -2112,9 +1287,9 @@ void ParserGroup::extract_typedef() {
     }
 
     //展开所有的typedef
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
 
         for (auto t = ts.begin(); t != ts.end(); ) {
             Token tt;
@@ -2139,10 +1314,10 @@ void ParserGroup::extract_typedef() {
     }
 }
 
-void ParserGroup::extract_decltype() {
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+void Obfuscator::extract_decltype() {
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->val == "decltype") {
                 assert((t+1)->type == CPP_OPEN_PAREN);
@@ -2172,7 +1347,7 @@ void ParserGroup::extract_decltype() {
     }
 }
 
-void ParserGroup::extract_container() {
+void Obfuscator::extract_container() {
     //TODO typedef已经连接了可能存在的container,需要重新分析
 
     //分析的容器如下
@@ -2206,14 +1381,14 @@ void ParserGroup::extract_container() {
     std::string ns = "std"; 
 
     int idx = 0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
         std::string file_name = _file_name[idx++];
         std::cout << "extract container: " << file_name << std::endl;
         if (file_name== "mi_device_store.cpp") {
             std::cout << "gotit";
         }
-        std::deque<Token>& ts = parser._ts;
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto t_n = t+1;//::
             auto t_nn = t+2;//container
@@ -2392,9 +1567,9 @@ void ParserGroup::extract_container() {
     std_container.insert("shared_ptr");
     ns = "boost"; 
 
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto t_n = t+1;//::
             auto t_nn = t+2;//container
@@ -2551,9 +1726,9 @@ void ParserGroup::extract_container() {
     }
 
     //合并stl 迭代器
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto t_n = t+1;
             auto t_nn = t+2;
@@ -2605,19 +1780,19 @@ static ScopeType parse_scope(std::string& scope_name,
     return scope;
 }
 
-void ParserGroup::extract_extern_type() {
+void Obfuscator::extract_extern_type() {
 
     Reader reader;
     reader.read("./extern_type");
-    Parser parser;
+    Lex lex;
     while(true) {
-        parser.push_token(parser.lex(&reader));
+        lex.push_token(lex.lex(&reader));
         if (reader.eof()) {
             break;
         }
     }
 
-    std::deque<Token>& ts = parser._ts;
+    std::deque<Token>& ts = lex._ts;
     std::map<std::string, ScopeType> scopes;
     for (auto t = ts.begin(); t != ts.end(); ) { 
         if(t->type == CPP_BR) {
@@ -2650,9 +1825,9 @@ void ParserGroup::extract_extern_type() {
         scopes.erase(it_3th);
     }
 
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
 
         //using只对当前文件后续的内容有效
         //TODO 这里忽略函数作用域的using
@@ -2773,13 +1948,13 @@ void ParserGroup::extract_extern_type() {
 
 
             //只处理文件类型的using, 不处理函数内部的using
-            if (t->val == "using" & (t+1)!= ts.end() && 
+            if (t->val == "using" && (t+1)!= ts.end() && 
                 (t+2)!= ts.end() && (t+2)->type == CPP_EQ) {
                 //using x = xx;
                 using_types.insert((t+1)->val);
                 ++t;
                 continue;
-            } else if (t->val == "using" & (t+1)!= ts.end() && (t+1)->val == "namespace") {
+            } else if (t->val == "using" && (t+1)!= ts.end() && (t+1)->val == "namespace") {
                 ScopeType cst;
                 t+=2;
                 auto t_s = scopes.find(t->val);
@@ -2820,11 +1995,11 @@ void ParserGroup::extract_extern_type() {
     }
 }
 
-void ParserGroup::combine_type_with_multi_and_rm_const() {
+void Obfuscator::combine_type_with_multi_and_rm_const() {
     //extract class member & function ret
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
 
         for (auto t = ts.begin(); t != ts.end(); ) {    
             //conbine type with * &
@@ -2846,7 +2021,7 @@ void ParserGroup::combine_type_with_multi_and_rm_const() {
         }
     }
 }
-void ParserGroup::extract_class_member (
+void Obfuscator::extract_class_member (
     std::string cur_c_name,
     std::deque<Token>::iterator& t, 
     std::deque<Token>::iterator t_begin, 
@@ -2872,7 +2047,7 @@ void ParserGroup::extract_class_member (
     ++t;
     while (t <= t_end) {
         auto t_n = t+1;
-        if (t->type == CPP_CLASS || t->type == CPP_STURCT) {
+        if (t->type == CPP_CLASS) {
             sub_class_name = t->val;
             ++t;
             continue;
@@ -2969,17 +2144,17 @@ void ParserGroup::extract_class_member (
     ++t;
 }
 
-void ParserGroup::extract_class_member() {
+void Obfuscator::extract_class_member() {
     //1 抽取成员变量, 细化成员函数的返回值
     int idx = 0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         std::string file_name = _file_name[idx++];
         std::cout << "extract class member variable: " << file_name << std::endl;
         std::string cur_c_name;
         for (auto t = ts.begin(); t != ts.end(); ) {
-            if (t->type == CPP_CLASS || t->type == CPP_STURCT) {
+            if (t->type == CPP_CLASS) {
                 cur_c_name = t->val;
                 ++t;
                 continue;
@@ -3000,9 +2175,9 @@ void ParserGroup::extract_class_member() {
 
     //2 把所有成员函数的定义处 标记成 CPP_MEMBER_FUNCTION
     idx = 0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
-        std::deque<Token>& ts = parser._ts;
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
+        std::deque<Token>& ts = lex._ts;
         std::string file_name = _file_name[idx++];
         std::cout << "extract class function: " << file_name << std::endl;
         for (auto t = ts.begin(); t != ts.end(); ) {
@@ -3157,11 +2332,11 @@ void ParserGroup::extract_class_member() {
     }    
 }
 
-void ParserGroup::extract_global_var_fn() {
+void Obfuscator::extract_global_var_fn() {
     //只在h文件中找
     int file_idx=0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
         std::string file_name = _file_name[file_idx++];
         bool is_h = false;
         if (file_name.size() > 2 && file_name.substr(file_name.size()-2, 2) == ".h") {
@@ -3177,15 +2352,13 @@ void ParserGroup::extract_global_var_fn() {
 
         std::cout << "extract global var fn : " << file_name << std::endl;
 
-        std::deque<Token>& ts = parser._ts;
+        std::deque<Token>& ts = lex._ts;
         std::deque<Scope> scopes;
         Scope root_scope;
         root_scope.type = 0;
         scopes.push_back(root_scope);
         Scope* cur_scope = &(scopes.back());
         for (auto t = ts.begin(); t != ts.end(); ) {
-            bool next_class_template = false;
-            auto t_template = t;
             if (t->val=="namespace" &&
                 (t+1)!= ts.end() && (t+1)->type == CPP_NAME &&
                 (t+2)!= ts.end() && (t+2)->type == CPP_OPEN_BRACE) {
@@ -3400,12 +2573,12 @@ void ParserGroup::extract_global_var_fn() {
     }
 }
 
-void ParserGroup::extract_local_var_fn() {
+void Obfuscator::extract_local_var_fn() {
     //局部函数是cpp文件中以static开头的函数, cpp中不写static的有可能是全局函数
     //只在cpp文件中找
     int file_idx=0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
         std::string file_name = _file_name[file_idx++];
         if (file_name == "mi_db_server_main.cpp") {
             std::cout <<"got";
@@ -3417,7 +2590,7 @@ void ParserGroup::extract_local_var_fn() {
 
         std::cout << "extract local var fn: " << file_name << std::endl;
 
-        std::deque<Token>& ts = parser._ts;
+        std::deque<Token>& ts = lex._ts;
         std::deque<Scope> scopes;
         Scope root_scope;
         root_scope.type = 0;
@@ -3675,7 +2848,7 @@ void ParserGroup::extract_local_var_fn() {
 }
 
 //TODO LABEL 这里只能获取识别为type的参数
-std::map<std::string, Token> ParserGroup::label_skip_paren(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
+std::map<std::string, Token> Obfuscator::label_skip_paren(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
     std::stack<Token> sbrace;
     assert(t->type == CPP_OPEN_PAREN);
     sbrace.push(*t);
@@ -3718,7 +2891,7 @@ std::map<std::string, Token> ParserGroup::label_skip_paren(std::deque<Token>::it
     return paras;
 }
 
-Token ParserGroup::get_auto_type(
+Token Obfuscator::get_auto_type(
     std::deque<Token>::iterator t, 
     const std::deque<Token>::iterator t_start, 
     const std::string& class_name, 
@@ -3737,7 +2910,7 @@ Token ParserGroup::get_auto_type(
     return get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);
 }
 
-Token ParserGroup::recall_subjust_type(
+Token Obfuscator::recall_subjust_type(
     std::deque<Token>::iterator t, 
     const std::deque<Token>::iterator t_start, 
     const std::string& class_name, 
@@ -3766,7 +2939,6 @@ Token ParserGroup::recall_subjust_type(
     while (t > t_start) {
         auto t_p = t-1;
         auto t_n = t+1;
-        auto t_nn = t+2;
         if (t->val == v_name && t_n->type == CPP_EQ) {
             //可能是复制构造 如 type a =
             
@@ -3952,7 +3124,7 @@ Token ParserGroup::recall_subjust_type(
     return tt;
 }
 
-Token ParserGroup::get_fn_ret_type(
+Token Obfuscator::get_fn_ret_type(
     std::deque<Token>::iterator& t, 
     const std::deque<Token>::iterator t_start, 
     const std::string& class_name, 
@@ -4039,7 +3211,7 @@ Token ParserGroup::get_fn_ret_type(
                 return ret;
             } else {
                 Token t_o;
-                t_o.type == CPP_OTHER;
+                t_o.type = CPP_OTHER;
                 return t_o;
             }
         } else if (is_stl_container(tt.val)) {
@@ -4068,24 +3240,24 @@ Token ParserGroup::get_fn_ret_type(
                     return ret;
                 } else {
                     Token t_o;
-                    t_o.type == CPP_OTHER;
+                    t_o.type = CPP_OTHER;
                     return t_o;
                 }
             } else {
                 Token t_o;
-                t_o.type == CPP_OTHER;
+                t_o.type = CPP_OTHER;
                 return t_o;
             }
         } else {
             //TODO 无法分析
             Token t_o;
-            t_o.type == CPP_OTHER;
+            t_o.type = CPP_OTHER;
             return t_o;
         }
     }
 }
 
-Token ParserGroup::get_close_subject_type(
+Token Obfuscator::get_close_subject_type(
         std::deque<Token>::iterator& t, 
         const std::deque<Token>::iterator t_start, 
         const std::string& class_name, 
@@ -4101,7 +3273,7 @@ Token ParserGroup::get_close_subject_type(
     return get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);    
 }
 
-bool ParserGroup::check_deref(std::deque<Token>::iterator t, bool is_fn) {
+bool Obfuscator::check_deref(std::deque<Token>::iterator t, bool is_fn) {
     //只是找乘号, 不是真正的解引用, 因为只有迭代器和解引用之间才会发生类型的变化
     //assert(t->type == CPP_NAME || t->type == CPP_CALL);
     bool deref = (t-1)->type == CPP_MULT;
@@ -4130,7 +3302,7 @@ bool ParserGroup::check_deref(std::deque<Token>::iterator t, bool is_fn) {
     }
 }
 
-Token ParserGroup::get_subject_type(
+Token Obfuscator::get_subject_type(
     std::deque<Token>::iterator& t, 
     const std::deque<Token>::iterator t_start, 
     const std::string& class_name, 
@@ -4146,8 +3318,8 @@ Token ParserGroup::get_subject_type(
         tt.type = CPP_TYPE;
         tt.val = class_name;
         return tt;
-    } else if (t->val == "first" || t->val == "second" || t->type == CPP_NAME
-        &&(t_p->type == CPP_DOT || t_p->type == CPP_POINTER)) {
+    } else if ((t->val == "first" || t->val == "second" || t->type == CPP_NAME) &&
+               (t_p->type == CPP_DOT || t_p->type == CPP_POINTER)) {
         auto t_r = t-2;
         Token tt = get_subject_type(t_r, t_start, class_name, file_name, paras, is_cpp);
         if (tt.type == CPP_OTHER) {
@@ -4308,7 +3480,7 @@ Token ParserGroup::get_subject_type(
 
 }
 // //回溯寻找type是否在分析的代码模块中
-bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t, 
+bool Obfuscator::is_call_in_module(std::deque<Token>::iterator t, 
     const std::deque<Token>::iterator t_start, 
     const std::string& class_name, 
     const std::string& file_name, 
@@ -4424,7 +3596,7 @@ bool ParserGroup::is_call_in_module(std::deque<Token>::iterator t,
     }
 }
 
-void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t, 
+void Obfuscator::label_call_in_fn(std::deque<Token>::iterator t, 
     const std::deque<Token>::iterator t_start,
     const std::deque<Token>::iterator t_end, 
     const std::string& class_name, 
@@ -4526,7 +3698,7 @@ void ParserGroup::label_call_in_fn(std::deque<Token>::iterator t,
     }
 }
 
-void ParserGroup::label_call()  {
+void Obfuscator::label_call()  {
     //1 先找到调用域(必须是函数域); TODO 其他域比如: 初始化列表中的调用, 全局/静态 变量的构造处调用等
     //2 在函数域中寻找过程调用
     //3 找主语
@@ -4536,8 +3708,8 @@ void ParserGroup::label_call()  {
     //4 确定主语是混淆类中的元素, 则标记成call
 
     int file_idx=0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
         const std::string file_name = _file_name[file_idx++];
         bool is_cpp = is_source_file(file_name);
 
@@ -4545,7 +3717,7 @@ void ParserGroup::label_call()  {
         if (file_name == "mi_ai_operation_change_ai_op_priority.cpp") {
             std::cout << "gotit";
         }
-        std::deque<Token>& ts = parser._ts;        
+        std::deque<Token>& ts = lex._ts;        
 
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto it_n = t+1;
@@ -4614,7 +3786,7 @@ void ParserGroup::label_call()  {
     }
 }
 
-void ParserGroup::label_fn_as_para_in_fn(std::deque<Token>::iterator t, 
+void Obfuscator::label_fn_as_para_in_fn(std::deque<Token>::iterator t, 
     const std::deque<Token>::iterator t_start,
     const std::deque<Token>::iterator t_end, 
     const std::string& class_name, 
@@ -4646,11 +3818,11 @@ void ParserGroup::label_fn_as_para_in_fn(std::deque<Token>::iterator t,
     }
 }
 
-void ParserGroup::label_fn_as_parameter() {
+void Obfuscator::label_fn_as_parameter() {
 
     int file_idx=0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
         const std::string file_name = _file_name[file_idx++];
         bool is_cpp = is_source_file(file_name);
 
@@ -4658,7 +3830,7 @@ void ParserGroup::label_fn_as_parameter() {
         if (file_name == "mi_sql_filter.cpp") {
             std::cout << "gotit";
         }
-        std::deque<Token>& ts = parser._ts;        
+        std::deque<Token>& ts = lex._ts;        
 
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto it_n = t+1;
@@ -4725,15 +3897,15 @@ void ParserGroup::label_fn_as_parameter() {
 
 }
 
-void ParserGroup::replace_call(bool hash) {
+void Obfuscator::replace_call(bool hash) {
     //替换的内容
     //所有的class名称, 所有的非模板类成员函数, 全局/局部函数, 所有的call, 
 
     int file_idx=0;
     const std::string REPLACE = "_replace";
     const std::string RE_HEADER = "mi_";
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
         const std::string file_name = _file_name[file_idx];
         const std::string file_path = _file_path[file_idx];
         ++file_idx;
@@ -4741,7 +3913,7 @@ void ParserGroup::replace_call(bool hash) {
         std::deque<Token> to_be_replace;
         
         //1 把整合过的token中非模板非三方模块继承的类的member fn 以及局部和全局方程 以及 call 抽取出来
-        std::deque<Token>& ts = parser._ts;
+        std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ++t) {
             if ((t->type == CPP_CALL || t->type == CPP_FUNCTION) && t->val != "operator" && t->val != "main") { 
                 if (t->type == CPP_FUNCTION) {
@@ -4762,7 +3934,7 @@ void ParserGroup::replace_call(bool hash) {
         }
 
         //2 生成原始token 并把非模板类的class名称全抽取出来
-        std::deque<Token>& stage_ts = parser._stage_ts;
+        std::deque<Token>& stage_ts = lex._stage_ts;
         for (auto t = stage_ts.begin(); t != stage_ts.end(); ++t) {
             bool tm = false;
             if (t->type == CPP_NAME && is_in_class_struct(t->val, tm) && !tm && !is_ignore_class(t->val)) {
@@ -4781,7 +3953,7 @@ void ParserGroup::replace_call(bool hash) {
         
         ///4 替换
         int loc_sum = 0;
-        std::string code = parser._reader->_file_str;
+        std::string code = lex._reader->_file_str;
         int last_loc = -1;
         if (hash) {
             for (auto t = to_be_replace.begin(); t != to_be_replace.end(); ++t) {
@@ -4816,29 +3988,29 @@ void ParserGroup::replace_call(bool hash) {
     }
 }
 
-void ParserGroup::set_ignore_class(const std::set<std::string>& c_names) {
+void Obfuscator::set_ignore_class(const std::set<std::string>& c_names) {
     _ignore_c_name = c_names;
 }
 
-void ParserGroup::set_ignore_function(const std::set<std::string>& fn_names) {
+void Obfuscator::set_ignore_function(const std::set<std::string>& fn_names) {
     _ignore_fn_name = fn_names;
 }
 
-void ParserGroup::set_ignore_class_function(const std::map<std::string, std::set<std::string>>& c_fn_name) {
+void Obfuscator::set_ignore_class_function(const std::map<std::string, std::set<std::string>>& c_fn_name) {
     _ignore_c_fn_name = c_fn_name;
 }
 
-bool ParserGroup::is_ignore_class(const std::string& c_name) {
+bool Obfuscator::is_ignore_class(const std::string& c_name) {
     const bool ig = _ignore_c_name.find(c_name) != _ignore_c_name.end();
     return ig;
 }
 
-bool ParserGroup::is_ignore_function(const std::string& fn_name) {
+bool Obfuscator::is_ignore_function(const std::string& fn_name) {
     const bool ig = _ignore_fn_name.find(fn_name) != _ignore_fn_name.end();
     return ig;
 }
 
-bool ParserGroup::is_ignore_class_function(const std::string& c_name, const std::string& fn_name) {
+bool Obfuscator::is_ignore_class_function(const std::string& c_name, const std::string& fn_name) {
     auto it = _ignore_c_fn_name_ext.find(c_name);
     if (it != _ignore_c_fn_name_ext.end()) {
         return it->second.find(fn_name) != it->second.end();
@@ -4847,10 +4019,10 @@ bool ParserGroup::is_ignore_class_function(const std::string& c_name, const std:
     return false;
 }
 
-void ParserGroup::debug(const std::string& debug_out) {
+void Obfuscator::debug(const std::string& debug_out) {
     size_t i=0;
-    for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-        Parser& parser = *(*it);
+    for (auto it = _lex.begin(); it != _lex.end(); ++it) {
+        Lex& lex = *(*it);
         const std::string& file_name = _file_path[i++];
         const std::string f = file_name +".l1";
         std::cout << "print file token: " << file_name << std::endl;
@@ -4860,7 +4032,7 @@ void ParserGroup::debug(const std::string& debug_out) {
             continue;
         }
 
-        const std::deque<Token>& ts = parser.get_tokens();
+        const std::deque<Token>& ts = lex._ts;
         for (auto it2=ts.begin(); it2!=ts.end(); ++it2) {
             const Token& t = *it2;
             out << t.type << ": ";
@@ -4908,7 +4080,7 @@ void ParserGroup::debug(const std::string& debug_out) {
             }
             if (c.is_template) {
                 out << "< ";
-                for (auto j=0; j<c.tm_paras_list.size(); ++j) {
+                for (size_t j=0; j<c.tm_paras_list.size(); ++j) {
                     auto tj = c.tm_paras.find(c.tm_paras_list[j]);
                     assert (tj != c.tm_paras.end());
                     print_token(tj->second, out);
@@ -5114,7 +4286,7 @@ void ParserGroup::debug(const std::string& debug_out) {
     }
 }
 
-bool ParserGroup::is_in_marco(const std::string& m) {
+bool Obfuscator::is_in_marco(const std::string& m) {
     for (auto it=_g_marco.begin(); it != _g_marco.end(); ++it) {
         if (!(*it).ts.empty()) {
             if((*it).ts.front().val == m) {
@@ -5126,7 +4298,7 @@ bool ParserGroup::is_in_marco(const std::string& m) {
     return false;
 }
 
-bool ParserGroup::is_in_marco(const std::string& m, Token& val) {
+bool Obfuscator::is_in_marco(const std::string& m, Token& val) {
     for (auto it=_g_marco.begin(); it != _g_marco.end(); ++it) {
         if (!(*it).ts.empty()) {
             if((*it).ts.front().val == m) {
@@ -5139,7 +4311,7 @@ bool ParserGroup::is_in_marco(const std::string& m, Token& val) {
     return false;
 }
 
-bool ParserGroup::is_in_class_struct(const std::string& name, bool& tm) {
+bool Obfuscator::is_in_class_struct(const std::string& name, bool& tm) {
     for (auto it=_g_class.begin(); it != _g_class.end(); ++it) {
         if (it->first == name) {
             tm = it->second.is_template;
@@ -5150,11 +4322,11 @@ bool ParserGroup::is_in_class_struct(const std::string& name, bool& tm) {
     return false;
 }
 
-bool ParserGroup::is_in_typedef(const std::string& name) {
+bool Obfuscator::is_in_typedef(const std::string& name) {
     return _typedef_map.find(name) != _typedef_map.end();
 }
 
-bool ParserGroup::is_in_typedef(const std::string& name, Token& t_type) {
+bool Obfuscator::is_in_typedef(const std::string& name, Token& t_type) {
     auto it = _typedef_map.find(name);
     if (it != _typedef_map.end()) {
         t_type = it->second;
@@ -5164,7 +4336,7 @@ bool ParserGroup::is_in_typedef(const std::string& name, Token& t_type) {
     return false;
 }
 
-bool ParserGroup::is_member_function(const std::string& c_name, const std::string& fn_name) {
+bool Obfuscator::is_member_function(const std::string& c_name, const std::string& fn_name) {
     auto it_fn = _g_class_fn_with_base.find(c_name);
     if (it_fn != _g_class_fn_with_base.end()) {
         std::vector<ClassFunction> fns = it_fn->second;
@@ -5178,7 +4350,7 @@ bool ParserGroup::is_member_function(const std::string& c_name, const std::strin
     return false;
 }
 
-bool ParserGroup::is_member_function(const std::string& c_name, const std::string& fn_name, Token& ret) {
+bool Obfuscator::is_member_function(const std::string& c_name, const std::string& fn_name, Token& ret) {
     auto it_fns = _g_class_fn_with_base.find(c_name);
     if (it_fns == _g_class_fn_with_base.end()) {
         return false;
@@ -5194,7 +4366,7 @@ bool ParserGroup::is_member_function(const std::string& c_name, const std::strin
     return false;
 }
 
-bool ParserGroup::is_member_variable(const std::string& c_name, const std::string& c_v_name, Token& t_type) {
+bool Obfuscator::is_member_variable(const std::string& c_name, const std::string& c_v_name, Token& t_type) {
     auto it_c_vs = _g_class_variable_with_base.find(c_name);
     if (it_c_vs != _g_class_variable_with_base.end()) {
         for (auto it_v = it_c_vs->second.begin(); it_v != it_c_vs->second.end(); ++it_v) {
@@ -5208,7 +4380,7 @@ bool ParserGroup::is_member_variable(const std::string& c_name, const std::strin
     return false;
 }
 
-std::map<std::string, Token> ParserGroup::get_template_class_type_paras(std::string c_name) {
+std::map<std::string, Token> Obfuscator::get_template_class_type_paras(std::string c_name) {
     auto it_c = _g_class.find(c_name);
     if (it_c != _g_class.end()) {
         return it_c->second.tm_paras;
@@ -5217,7 +4389,7 @@ std::map<std::string, Token> ParserGroup::get_template_class_type_paras(std::str
     }
 }
 
-bool ParserGroup::is_global_variable(const std::string& v_name, Token& t_type) {
+bool Obfuscator::is_global_variable(const std::string& v_name, Token& t_type) {
     auto it_v = _g_variable.find(v_name);
     if (it_v != _g_variable.end()) {
         t_type = it_v->second.type;
@@ -5227,7 +4399,7 @@ bool ParserGroup::is_global_variable(const std::string& v_name, Token& t_type) {
     return false;
 }
 
-bool ParserGroup::is_local_variable(const std::string& file_name, const std::string& v_name, Token& ret_type) {
+bool Obfuscator::is_local_variable(const std::string& file_name, const std::string& v_name, Token& ret_type) {
     auto it_vs = _local_variable.find(file_name);
     if(it_vs != _local_variable.end()) {
         auto it_v = it_vs->second.find(v_name);
@@ -5240,7 +4412,7 @@ bool ParserGroup::is_local_variable(const std::string& file_name, const std::str
     return false;
 }
 
-bool ParserGroup::is_local_function(const std::string& file_name, const std::string& fn_name, Token& ret_type) {
+bool Obfuscator::is_local_function(const std::string& file_name, const std::string& fn_name, Token& ret_type) {
     auto it_fns = _local_functions.find(file_name);
     if(it_fns != _local_functions.end()) {
         auto it_fn = it_fns->second.find(fn_name);
@@ -5253,7 +4425,7 @@ bool ParserGroup::is_local_function(const std::string& file_name, const std::str
     return false;
 }
 
-bool ParserGroup::is_global_function(const std::string& fn_name, Token& ret) {
+bool Obfuscator::is_global_function(const std::string& fn_name, Token& ret) {
     auto it_fn = _g_functions.find(fn_name);
     if (it_fn != _g_functions.end()) {
         ret = it_fn->second.ret;
@@ -5263,7 +4435,7 @@ bool ParserGroup::is_global_function(const std::string& fn_name, Token& ret) {
     return false;
 }
 
-bool ParserGroup::is_stl_container(const std::string& name) {
+bool Obfuscator::is_stl_container(const std::string& name) {
     static const char* stl_containers[] = {
     "vector",
     "deque",
@@ -5279,7 +4451,7 @@ bool ParserGroup::is_stl_container(const std::string& name) {
     "unique_ptr",
     };
 
-    for (int i=0; i<sizeof(stl_containers)/sizeof(char*); ++i) {
+    for (size_t i=0; i<sizeof(stl_containers)/sizeof(char*); ++i) {
         if (name == stl_containers[i]) {
             return true;
         }
@@ -5288,7 +4460,7 @@ bool ParserGroup::is_stl_container(const std::string& name) {
     return false;
 }
 
-bool ParserGroup::is_stl_container_ret_iterator(const std::string& name) {
+bool Obfuscator::is_stl_container_ret_iterator(const std::string& name) {
     static const char* fn[] = {
         "begin",
         "end",
@@ -5304,7 +4476,7 @@ bool ParserGroup::is_stl_container_ret_iterator(const std::string& name) {
         "insert",
         "erase",
     };
-    for (int i=0; i<sizeof(fn)/sizeof(char*); ++i) {
+    for (size_t i=0; i<sizeof(fn)/sizeof(char*); ++i) {
         if (name == fn[i]) {
             return true;
         }
@@ -5313,7 +4485,7 @@ bool ParserGroup::is_stl_container_ret_iterator(const std::string& name) {
     return false;
 }
 
-bool ParserGroup::is_stl_container_ret_val(const std::string& name) {
+bool Obfuscator::is_stl_container_ret_val(const std::string& name) {
     static const char* fn[] = {
         "front",
         "back",
@@ -5324,7 +4496,7 @@ bool ParserGroup::is_stl_container_ret_val(const std::string& name) {
         "crbegin",
         "crend",
     };
-    for (int i=0; i<sizeof(fn)/sizeof(char*); ++i) {
+    for (size_t i=0; i<sizeof(fn)/sizeof(char*); ++i) {
         if (name == fn[i]) {
             return true;
         }
@@ -5333,7 +4505,7 @@ bool ParserGroup::is_stl_container_ret_val(const std::string& name) {
     return false;
 }
 
-bool ParserGroup::is_3th_base(const std::string& name) {
+bool Obfuscator::is_3th_base(const std::string& name) {
     auto c_bases = _g_class_bases.find(name);
     if (c_bases != _g_class_bases.end()) {
         for (auto it = c_bases->second.begin(); it != c_bases->second.end(); ++it) {

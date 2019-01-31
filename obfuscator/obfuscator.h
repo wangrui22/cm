@@ -1,69 +1,16 @@
-#ifndef PARSER_H
-#define PARSER_H
+#ifndef MY_OBFUSCATOR_H
+#define MY_OBFUSCATOR_H
 
-#include <string>
-#include <deque>
-#include <set>
-#include <map>
-#include <vector>
 #include "common.h"
+#include "lex.h"
 
-class Reader {
+class Obfuscator {
 public:
-    Reader();
-    ~Reader();
+    Obfuscator();
+    ~Obfuscator();
 
-    int read(const std::string& file);
-    const std::string& get_file_path();
-    char cur_char();
-    char next_char();
-    char pre_char();
-    void next_line();
-    int get_cur_line() const;
-    int get_cur_loc() const;
-    bool eof() const;
-    std::string get_string(int loc, int len);
-    void skip_white();
-
-public:
-    std::string _file_str;
-    std::string _file_path;
-    int _cur_line;
-    int _cur_loc;
-};
-
-class Parser {
-public: 
-    friend class ParserGroup;
-
-    Parser();
-    ~Parser();
-
-    void set_reader(Reader* reader);
-    void stage_token();
-
-    Token lex(Reader* cpp_reader);
-    void push_token(const Token& t);
-    const std::deque<Token>& get_tokens() const;
-
-    //loop
-    void f1();
-    void f2();
-
-private:
-    std::deque<Token> _ts;
-    std::deque<Token> _stage_ts;
-    Reader* _reader;
-};
-
-
-class ParserGroup {
-public:
-    ParserGroup();
-    ~ParserGroup();
-
-    void add_parser(const std::string& file_name, const std::string& file_path, Parser* parser, Reader* reader);
-    Parser* get_parser(const std::string& file_name);
+    void add_lex(const std::string& file_name, const std::string& file_path, Lex* lex, Reader* reader);
+    Lex* get_lex(const std::string& file_name);
     void set_ignore_class(const std::set<std::string>& c_name);
     void set_ignore_function(const std::set<std::string>& fn_name);
     void set_ignore_class_function(const std::map<std::string, std::set<std::string>>& c_fn_name);
@@ -207,7 +154,7 @@ private:
 private:
     std::vector<std::string> _file_name;
     std::vector<std::string> _file_path;
-    std::vector<Parser*> _parsers;
+    std::vector<Lex*> _lex;
     std::vector<Reader*> _readers;
 
     std::set<std::string> _ignore_c_name;
