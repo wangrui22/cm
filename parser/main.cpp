@@ -161,6 +161,7 @@ int main(int argc, char* argv[]) {
             Util::get_all_file_recursion(src_dir[j], post,  h_file);
 
             std::set<std::string> post2;
+            post.insert(".cu");
             post2.insert(".cpp");
         
             Util::get_all_file_recursion(src_dir[j], post2,  c_file);
