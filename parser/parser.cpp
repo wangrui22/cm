@@ -825,6 +825,223 @@ void Parser::f2() {
     }
 }
 
+
+//------------------------------------------------------------------------------------------------------//
+//common function begin
+//------------------------------------------------------------------------------------------------------//
+
+static inline void jump_brace(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
+    assert(t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN);
+    std::stack<Token> ss;
+    ss.push(*t);
+    ++t;
+    while(!ss.empty() && t != ts.end()) {
+        if (t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN) {
+            ss.push(*t);
+            ++t;
+        } else if (t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END) {
+            assert(ss.top().type == CPP_OPEN_BRACE || ss.top().type == CPP_CLASS_BEGIN);
+            ss.pop();
+            if (ss.empty()) {
+                continue;
+            }
+            ++t;
+        } else {
+            ++t;
+        }
+    }
+}
+
+static inline void jump_angle_brace(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
+    assert(t->type == CPP_LESS);
+    std::stack<Token> ss;
+    ss.push(*t);
+    ++t;
+    while(!ss.empty() && t != ts.end()) {
+        if (t->type == CPP_LESS) {
+            ss.push(*t);
+            ++t;
+        } else if (t->type == CPP_GREATER) {
+            assert(ss.top().type == CPP_LESS);
+            ss.pop();
+            if (ss.empty()) {
+                continue;
+            }
+            ++t;
+        } else {
+            ++t;
+        }
+    }
+}
+
+static inline void jump_angle_brace(std::deque<Token>::iterator& t, std::deque<Token>::iterator t_end) {
+    assert(t->type == CPP_LESS);
+    std::stack<Token> ss;
+    ss.push(*t);
+    ++t;
+    while(!ss.empty() && t<t_end) {
+        if (t->type == CPP_LESS) {
+            ss.push(*t);
+            ++t;
+        } else if (t->type == CPP_GREATER) {
+            assert(ss.top().type == CPP_LESS);
+            ss.pop();
+            if (ss.empty()) {
+                continue;
+            }
+            ++t;
+        } else {
+            ++t;
+        }
+    }
+}
+
+static inline void jump_square(std::deque<Token>::iterator& t) {
+    assert(t->type == CPP_OPEN_SQUARE);
+    std::stack<Token> ss;
+    ss.push(*t);
+    ++t;
+    while(!ss.empty()) {
+        if (t->type == CPP_OPEN_SQUARE) {
+            ss.push(*t);
+            ++t;
+        } else if (t->type == CPP_CLOSE_SQUARE) {
+            ss.pop();
+            if (ss.empty()) {
+                continue;
+            }
+            ++t;
+        } else {
+            ++t;
+        }
+    }
+}
+
+static inline void jump_paren(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
+    std::stack<Token> s_de;
+    while (t->type != CPP_OPEN_PAREN && t != ts.end()) {
+        ++t;
+    }
+    if (t == ts.end()) {
+        return;
+    }
+    s_de.push(*t);
+    // )
+    ++t;
+    while (!s_de.empty()) {
+        if (t->type == CPP_CLOSE_PAREN) {
+            s_de.pop();
+            if (s_de.empty()) {
+                continue;
+            }
+            ++t;
+        } else if (t->type == CPP_OPEN_PAREN) {
+            s_de.push(*t);
+            ++t;
+        } else {
+            ++t;
+        }
+    }
+};
+
+static inline void jump_paren(std::deque<Token>::iterator& t) {
+    std::stack<Token> s_de;
+    assert(t->type == CPP_OPEN_PAREN);
+    s_de.push(*t);
+    // )
+    ++t;
+    while (!s_de.empty()) {
+        if (t->type == CPP_CLOSE_PAREN) {
+            s_de.pop();
+            if (s_de.empty()) {
+                continue;
+            }
+            ++t;
+        } else if (t->type == CPP_OPEN_PAREN) {
+            s_de.push(*t);
+            ++t;
+        } else {
+            ++t;
+        }
+    }
+};
+
+static void jump_before_square(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
+    assert(t->type == CPP_CLOSE_SQUARE);
+    std::stack<Token> ts;
+    ts.push(*t);
+    --t;
+    while (!ts.empty()&& t>=t_start) {
+        if(t->type == CPP_OPEN_SQUARE) {
+            ts.pop();
+        } else if (t->type == CPP_CLOSE_SQUARE) {
+            ts.push(*t);
+        }
+        --t;
+    }
+}
+
+static void jump_before_praen(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
+    assert(t->type == CPP_CLOSE_PAREN);
+    std::stack<Token> ts;
+    ts.push(*t);
+    --t;
+    while (!ts.empty() && t>=t_start) {
+        if(t->type == CPP_OPEN_PAREN) {
+            ts.pop();
+        } else if (t->type == CPP_CLOSE_PAREN) {
+            ts.push(*t);
+        }
+        --t;
+    }
+}
+
+static void jump_before_praen(std::deque<Token>::iterator& t) {
+    assert(t->type == CPP_CLOSE_PAREN);
+    std::stack<Token> ts;
+    ts.push(*t);
+    --t;
+    while (!ts.empty()) {
+        if(t->type == CPP_OPEN_PAREN) {
+            ts.pop();
+        } else if (t->type == CPP_CLOSE_PAREN) {
+            ts.push(*t);
+        }
+        --t;
+    }
+}
+
+static void jump_before_angle_brace(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
+    assert(t->type == CPP_GREATER);
+    std::stack<Token> ts;
+    ts.push(*t);
+    --t;
+    while (!ts.empty() && t>=t_start) {
+        if(t->type == CPP_LESS) {
+            ts.pop();
+        } else if (t->type == CPP_GREATER) {
+            ts.push(*t);
+        }
+        --t;
+    }
+}
+
+static inline void print_token(const Token& t, std::ostream& out) {
+    out << t.val << " ";
+    for (auto it2 = t.ts.begin(); it2 != t.ts.end(); ++it2) {
+        print_token(*it2, out);
+    }
+}
+
+static inline bool is_source_file(const std::string& file_name) {
+    return ( (file_name.size() > 4 && file_name.substr(file_name.size()-4, 4) == ".cpp") ||
+            (file_name.size() > 3 && file_name.substr(file_name.size()-3, 3) == ".cu") );
+}
+
+//------------------------------------------------------------------------------------------------------//
+//common function end
+//------------------------------------------------------------------------------------------------------//
+
 ParserGroup::ParserGroup() {
 
 }
@@ -1001,29 +1218,6 @@ void ParserGroup::parse_marco() {
     }
 }
 
-// void ParserGroup::extract_tempalte() {
-//     //把 template尖括号中class 和 typename 后面跟的token type设置成 CPP_TYPE
-//     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-//         Parser& parser = *(*it);
-//         std::deque<Token>& ts = parser._ts;
-//         for (auto t = ts.begin(); t != ts.end(); ) {
-//             if (t->val == "template") {
-//                 //找<
-//                 std::stack<Token> st;
-//                 while((++t)->type != CPP_GREATER) {}
-//                 st.push(*t);
-                
-//                 //将仅跟着class之后的Name设置成type
-
-
-
-//             }
-//         }
-//     }
-//     //把 模板类/结构体提取出来
-
-// }
-
 void ParserGroup::extract_enum() {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
@@ -1046,153 +1240,6 @@ void ParserGroup::extract_enum() {
         }
     }
 }
-
-void add_base(const std::map<std::string, ClassType>& cs, ClassType c, std::map<std::string, ClassType>& bases) {
-    if (!c.father.empty()) {
-        auto c_f = cs.find(c.father);
-        if (c_f != cs.end()) {
-            //忽略三方模块的方法
-            bases[c_f->second.name] = c_f->second;
-            add_base(cs, c_f->second, bases);
-        }
-    }
-}
-
-static inline void jump_brace(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
-    assert(t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN);
-    std::stack<Token> ss;
-    ss.push(*t);
-    ++t;
-    while(!ss.empty() && t != ts.end()) {
-        if (t->type == CPP_OPEN_BRACE || t->type == CPP_CLASS_BEGIN) {
-            ss.push(*t);
-            ++t;
-        } else if (t->type == CPP_CLOSE_BRACE || t->type == CPP_CLASS_END) {
-            assert(ss.top().type == CPP_OPEN_BRACE || ss.top().type == CPP_CLASS_BEGIN);
-            ss.pop();
-            if (ss.empty()) {
-                continue;
-            }
-            ++t;
-        } else {
-            ++t;
-        }
-    }
-}
-
-static inline void jump_angle_brace(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
-    assert(t->type == CPP_LESS);
-    std::stack<Token> ss;
-    ss.push(*t);
-    ++t;
-    while(!ss.empty() && t != ts.end()) {
-        if (t->type == CPP_LESS) {
-            ss.push(*t);
-            ++t;
-        } else if (t->type == CPP_GREATER) {
-            assert(ss.top().type == CPP_LESS);
-            ss.pop();
-            if (ss.empty()) {
-                continue;
-            }
-            ++t;
-        } else {
-            ++t;
-        }
-    }
-}
-
-static inline void jump_angle_brace(std::deque<Token>::iterator& t, std::deque<Token>::iterator t_end) {
-    assert(t->type == CPP_LESS);
-    std::stack<Token> ss;
-    ss.push(*t);
-    ++t;
-    while(!ss.empty() && t<t_end) {
-        if (t->type == CPP_LESS) {
-            ss.push(*t);
-            ++t;
-        } else if (t->type == CPP_GREATER) {
-            assert(ss.top().type == CPP_LESS);
-            ss.pop();
-            if (ss.empty()) {
-                continue;
-            }
-            ++t;
-        } else {
-            ++t;
-        }
-    }
-}
-
-static inline void jump_square(std::deque<Token>::iterator& t) {
-    assert(t->type == CPP_OPEN_SQUARE);
-    std::stack<Token> ss;
-    ss.push(*t);
-    ++t;
-    while(!ss.empty()) {
-        if (t->type == CPP_OPEN_SQUARE) {
-            ss.push(*t);
-            ++t;
-        } else if (t->type == CPP_CLOSE_SQUARE) {
-            ss.pop();
-            if (ss.empty()) {
-                continue;
-            }
-            ++t;
-        } else {
-            ++t;
-        }
-    }
-}
-
-static inline void jump_paren(std::deque<Token>::iterator& t, const std::deque<Token>& ts) {
-    std::stack<Token> s_de;
-    while (t->type != CPP_OPEN_PAREN && t != ts.end()) {
-        ++t;
-    }
-    if (t == ts.end()) {
-        return;
-    }
-    s_de.push(*t);
-    // )
-    ++t;
-    while (!s_de.empty()) {
-        if (t->type == CPP_CLOSE_PAREN) {
-            s_de.pop();
-            if (s_de.empty()) {
-                continue;
-            }
-            ++t;
-        } else if (t->type == CPP_OPEN_PAREN) {
-            s_de.push(*t);
-            ++t;
-        } else {
-            ++t;
-        }
-    }
-};
-
-static inline void jump_paren(std::deque<Token>::iterator& t) {
-    std::stack<Token> s_de;
-    assert(t->type == CPP_OPEN_PAREN);
-    s_de.push(*t);
-    // )
-    ++t;
-    while (!s_de.empty()) {
-        if (t->type == CPP_CLOSE_PAREN) {
-            s_de.pop();
-            if (s_de.empty()) {
-                continue;
-            }
-            ++t;
-        } else if (t->type == CPP_OPEN_PAREN) {
-            s_de.push(*t);
-            ++t;
-        } else {
-            ++t;
-        }
-    }
-};
 
 void ParserGroup::parse_tempalte_para(
     std::deque<Token>::iterator t_begin, 
@@ -1680,6 +1727,17 @@ void ParserGroup::extract_class(
             } else {
                 ++t;
             }
+        }
+    }
+}
+
+static inline void add_base(const std::map<std::string, ClassType>& cs, ClassType c, std::map<std::string, ClassType>& bases) {
+    if (!c.father.empty()) {
+        auto c_f = cs.find(c.father);
+        if (c_f != cs.end()) {
+            //忽略三方模块的方法
+            bases[c_f->second.name] = c_f->second;
+            add_base(cs, c_f->second, bases);
         }
     }
 }
@@ -2760,152 +2818,6 @@ void ParserGroup::extract_extern_type() {
             ++t;
         }
     }
-    
-
-    // //抽取std boost类型
-    // //TODO 这里可以用配置文件来做, 不仅仅是std boost还可以是其他的三方模块
-    // ScopeType std_scope;
-    // std_scope.scope = "std";
-    // std_scope.types.insert("string");
-    // std_scope.types.insert("atomic_int");
-    // std_scope.types.insert("atomic_bool");
-    // std_scope.types.insert("ifstream");
-    // std_scope.types.insert("ofstream");
-    // std_scope.types.insert("iostream");
-    // std_scope.types.insert("fstream");
-    // std_scope.types.insert("sstream");
-    
-
-    // ScopeType boost_scope;
-    // boost_scope.scope = "boost";
-    // boost_scope.types.insert("thread");
-    // boost_scope.types.insert("mutex");
-    // boost_scope.types.insert("condition");
-    // boost_scope.types.insert("unique_lock");
-
-    // ScopeType boost_mutex;
-    // boost_mutex.scope = "mutex";
-    // boost_mutex.types.insert("scoped_lock");
-    // boost_scope.sub_scope.insert(boost_mutex);
-
-    // ScopeType json;
-    // json.scope = "nlohmann";
-    // json.types.insert("json");
-
-    // ScopeType uws;
-    // uws.scope
-
-
-    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-    //     Parser& parser = *(*it);
-    //     std::deque<Token>& ts = parser._ts;
-    //     for (auto t = ts.begin(); t != ts.end(); ) {
-
-    //         //---------------------------------------------------------//
-    //         //common function
-    //         std::function<void(const ScopeType&, const std::string&)> greedy_scope_analyze = [&t, &ts](const ScopeType& scope_type, const std::string& scope_root) {
-    //             TokenType to_be_type = CPP_NAME;
-    //             const ScopeType* last_scope = &scope_type;
-    //             std::deque<Token> ts_to_be_type;
-
-    // SCOPE_:
-    //             auto t_n = t+1;
-    //             auto t_nn = t+2;
-    //             auto t_nnn = t+3;
-    //             if (t_n == ts.end() || t_nn == ts.end()) {
-    //                 std::cerr << "std scope err\n";
-    //                 ++t;
-    //                 return;
-    //             }
-
-    //             if (t_n->type == CPP_SCOPE) {
-    //                 auto it_sub_scope = last_scope->sub_scope.find({t_nn->val, std::set<std::string>(), std::set<ScopeType>()});
-    //                 auto it_type = last_scope->types.find(t_nn->val);
-
-    //                 if (it_sub_scope != last_scope->sub_scope.end() && it_type != last_scope->types.end() && t_nnn != ts.end() && t_nnn->type == CPP_SCOPE) {
-    //                     ts_to_be_type.push_back(*t_n);//::
-    //                     ts_to_be_type.push_back(*t_nn);//type
-    //                     ts_to_be_type.back().subject = last_scope->scope;
-    //                     t+=2;
-
-    //                     last_scope = &(*it_sub_scope);
-
-    //                 } else if (it_type != last_scope->types.end()) {
-    //                     //end 
-    //                     to_be_type = CPP_TYPE;
-    //                     ts_to_be_type.push_back(*t_n);//::
-    //                     ts_to_be_type.push_back(*t_nn);//type
-    //                     ts_to_be_type.back().subject = last_scope->scope;
-    //                     t+=3;
-    //                 } else if (it_sub_scope != last_scope->sub_scope.end()) {
-    //                     ts_to_be_type.push_back(*t_n);//::
-    //                     ts_to_be_type.push_back(*t_nn);//type
-    //                     ts_to_be_type.back().subject = last_scope->scope;
-    //                     t+=2;
-
-    //                     last_scope = &(*it_sub_scope);
-    //                 } else {
-    //                     //std function
-    //                     std::cout << scope_root << " function: " << t_nn->val << std::endl;
-    //                     ++t;
-    //                     return;
-    //                 } 
-    //                 goto SCOPE_;
-    //             } else if (!ts_to_be_type.empty() && to_be_type == CPP_TYPE) {
-    //                 t -= (ts_to_be_type.size()+1);
-    //                 assert(t->val == scope_root);
-    //                 t->ts.clear();
-    //                 for (auto it_types = ts_to_be_type.begin(); it_types != ts_to_be_type.end(); ++it_types) {
-    //                     if (it_types->type != CPP_SCOPE) {
-    //                         t->ts.push_back(*it_types);
-    //                     }
-    //                 }
-    //                 t->type = CPP_TYPE;
-    //                 t->subject = scope_type.scope;
-    //                 ++t;
-    //                 while(!ts_to_be_type.empty()) {
-    //                     ts_to_be_type.pop_back();
-    //                     t = ts.erase(t);
-    //                 }
-    //                 return;
-    //             } else {
-    //                 std::cerr << "err here.\n";
-    //             }
-
-    //             ++t;
-    //             return;
-    //         };
-    //         //---------------------------------------------------------//
-
-    //         //抽取所有的std的类型
-    //         if (t->val == "std") {
-    //             greedy_scope_analyze(std_scope, "std");
-    //         } else if (t->val == "boost") {
-    //             greedy_scope_analyze(boost_scope, "boost");
-    //         }
-
-    //         ++t;
-    //     }
-    // }
-
-    // static const char* ex_types[] = {
-    //     "cv_errcode",
-    // };
-    // for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
-    //     Parser& parser = *(*it);
-    //     std::deque<Token>& ts = parser._ts;
-    //     for (auto t = ts.begin(); t != ts.end(); ) {
-    //         if (t->type == CPP_NAME) {
-    //             for(int i=0; i<sizeof(ex_types)/sizeof(char*); ++i) {
-    //                 if (t->val == ex_types[i]) {
-    //                     t->type == CPP_TYPE;
-    //                 }
-    //             }
-    //         }
-
-    //         ++t;
-    //     }
-    // }
 }
 
 void ParserGroup::combine_type_with_multi_and_rm_const() {
@@ -3242,36 +3154,8 @@ void ParserGroup::extract_class_member() {
                 add_ig_fn(c_name, fn_name);
             }
         }
-    }
-    
+    }    
 }
-
-// bool ParserGroup::is_ignore_class_function(const std::string& c_name, const std::string& fn_name) {
-//     bool ig = is_ignore_class_function_direct(c_name, fn_name);
-//     if (ig) {
-//         return ig;
-//     }
-
-//     bool is_virtual = false;
-//     auto it_fn = _g_class_fn_with_base.find(c_name);
-//     if (it_fn != _g_class_fn_with_base.end()) {
-//         std::vector<ClassFunction> fns = it_fn->second;
-//         for (auto it = fns.begin(); it != fns.end(); ++it) {
-//             if (it->fn_name == fn_name){
-//                 is_virtual = it->is_virtual;
-//                 break;
-//             }
-//         }
-//     }
-//     if (is_virtual) {
-//         //虚函数, 则只要是基类被ignore了派生类也自然是ignore的
-//         _g_class_bases.find(c_name);
-//     }
-
-//     for (auto)
-    
-// }
-
 
 void ParserGroup::extract_global_var_fn() {
     //只在h文件中找
@@ -3526,12 +3410,7 @@ void ParserGroup::extract_local_var_fn() {
         if (file_name == "mi_db_server_main.cpp") {
             std::cout <<"got";
         }
-        bool is_cpp = false;
-        if (file_name.size() > 2 && file_name.substr(file_name.size()-4, 5) == ".cpp") {
-            is_cpp = true;
-        } else {
-            is_cpp = false;   
-        }
+        bool is_cpp = is_source_file(file_name);
         if (!is_cpp) {
             continue;
         }
@@ -3845,8 +3724,7 @@ Token ParserGroup::get_auto_type(
     const std::string& class_name, 
     const std::string& file_name, 
     const std::map<std::string, Token>& paras,
-    bool is_cpp,
-    int case0) {
+    bool is_cpp) {
     assert(t->val == "auto");
 
     //找到赋值的终点
@@ -3854,17 +3732,7 @@ Token ParserGroup::get_auto_type(
     while(t_end->type != CPP_SEMICOLON) {//TODO 如果域在构造函数列表中,则结束符号不是 ; 
         ++t_end;
     }
-    //auto t_begin = t;
     t = t_end-1;
-
-    // if (0 == case0) {
-    //     //auto a = ...;
-    //     //t_begin += 3;
-    // } else {
-    //     //auto a(...);
-    //     //t_begin += 3;
-    //     t--;
-    // }
 
     return get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);
 }
@@ -3910,7 +3778,7 @@ Token ParserGroup::recall_subjust_type(
             if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cout << "get type auto.\n";
-                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 1);
+                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp);
             } else if (t_p->type == CPP_TYPE) {
                 return *t_p;
             } else if (t_p->type == CPP_NAME) {
@@ -3933,7 +3801,7 @@ Token ParserGroup::recall_subjust_type(
             if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cout << "get type auto.\n";
-                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 1);
+                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp);
             } else if (t_p->type == CPP_TYPE) {
                 return *t_p;
             } else if (t_p->type == CPP_NAME) {
@@ -3954,7 +3822,7 @@ Token ParserGroup::recall_subjust_type(
             if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cout << "get type auto.\n";
-                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 2);
+                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp);
             } else if (t_p->type == CPP_TYPE) {
                 return *t_p;
             } else if (t_p->type == CPP_NAME) {
@@ -4024,7 +3892,7 @@ Token ParserGroup::recall_subjust_type(
             if (t_p->val == "auto") {
                 //寻找赋值语句的右部
                 std::cout << "get type auto.\n";
-                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp, 2);
+                return get_auto_type(t_p, t_start, class_name, file_name, paras, is_cpp);
             } else if (t_p->type == CPP_TYPE) {
                 return *t_p;
             } else if (t_p->type == CPP_NAME) {
@@ -4082,66 +3950,6 @@ Token ParserGroup::recall_subjust_type(
     Token tt;
     tt.type = CPP_OTHER;
     return tt;
-}
-
-static void jump_before_square(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
-    assert(t->type == CPP_CLOSE_SQUARE);
-    std::stack<Token> ts;
-    ts.push(*t);
-    --t;
-    while (!ts.empty()&& t>=t_start) {
-        if(t->type == CPP_OPEN_SQUARE) {
-            ts.pop();
-        } else if (t->type == CPP_CLOSE_SQUARE) {
-            ts.push(*t);
-        }
-        --t;
-    }
-}
-
-static void jump_before_praen(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
-    assert(t->type == CPP_CLOSE_PAREN);
-    std::stack<Token> ts;
-    ts.push(*t);
-    --t;
-    while (!ts.empty() && t>=t_start) {
-        if(t->type == CPP_OPEN_PAREN) {
-            ts.pop();
-        } else if (t->type == CPP_CLOSE_PAREN) {
-            ts.push(*t);
-        }
-        --t;
-    }
-}
-
-static void jump_before_praen(std::deque<Token>::iterator& t) {
-    assert(t->type == CPP_CLOSE_PAREN);
-    std::stack<Token> ts;
-    ts.push(*t);
-    --t;
-    while (!ts.empty()) {
-        if(t->type == CPP_OPEN_PAREN) {
-            ts.pop();
-        } else if (t->type == CPP_CLOSE_PAREN) {
-            ts.push(*t);
-        }
-        --t;
-    }
-}
-
-static void jump_before_angle_brace(std::deque<Token>::iterator& t, const std::deque<Token>::iterator t_start) {
-    assert(t->type == CPP_GREATER);
-    std::stack<Token> ts;
-    ts.push(*t);
-    --t;
-    while (!ts.empty() && t>=t_start) {
-        if(t->type == CPP_LESS) {
-            ts.pop();
-        } else if (t->type == CPP_GREATER) {
-            ts.push(*t);
-        }
-        --t;
-    }
 }
 
 Token ParserGroup::get_fn_ret_type(
@@ -4731,10 +4539,7 @@ void ParserGroup::label_call()  {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         const std::string file_name = _file_name[file_idx++];
-        bool is_cpp = false;
-        if (file_name.size() > 2 && file_name.substr(file_name.size()-4, 5) == ".cpp") {
-            is_cpp = true;
-        } 
+        bool is_cpp = is_source_file(file_name);
 
         std::cout << "label file: " << file_name << std::endl;
         if (file_name == "mi_ai_operation_change_ai_op_priority.cpp") {
@@ -4847,10 +4652,7 @@ void ParserGroup::label_fn_as_parameter() {
     for (auto it = _parsers.begin(); it != _parsers.end(); ++it) {
         Parser& parser = *(*it);
         const std::string file_name = _file_name[file_idx++];
-        bool is_cpp = false;
-        if (file_name.size() > 2 && file_name.substr(file_name.size()-4, 5) == ".cpp") {
-            is_cpp = true;
-        } 
+        bool is_cpp = is_source_file(file_name);
 
         std::cout << "label file: " << file_name << std::endl;
         if (file_name == "mi_sql_filter.cpp") {
@@ -4994,9 +4796,6 @@ void ParserGroup::replace_call(bool hash) {
                 //先删除
                 code.replace(loc+loc_sum-1, len, v_new);
                 loc_sum += v_new.size() - v_old.size(); 
-                
-                //code.insert(loc+len+loc_sum-1, REPLACE);
-                //loc_sum += REPLACE.length();
             }
         } else {
             for (auto t = to_be_replace.begin(); t != to_be_replace.end(); ++t) {
@@ -5014,13 +4813,6 @@ void ParserGroup::replace_call(bool hash) {
         std::ofstream out(file_path, std::ios::out);
         out << code;
         out.close();
-    }
-}
-
-static inline void print_token(const Token& t, std::ostream& out) {
-    out << t.val << " ";
-    for (auto it2 = t.ts.begin(); it2 != t.ts.end(); ++it2) {
-        print_token(*it2, out);
     }
 }
 
@@ -5182,9 +4974,6 @@ void ParserGroup::debug(const std::string& debug_out) {
                 }
 
                 out << "\t ret: ";
-                // for (auto it2 = it->rets.begin(); it2 != it->rets.end(); ++it2) {
-                //    out << it2->val << " "; 
-                // }
                 print_token(cf.ret, out);
 
                 out << std::endl;
@@ -5556,4 +5345,3 @@ bool ParserGroup::is_3th_base(const std::string& name) {
 
     return false;
 }   
-

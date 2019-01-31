@@ -138,8 +138,7 @@ private:
         const std::string& class_name, 
         const std::string& file_name, 
         const std::map<std::string, Token>& paras,
-        bool is_cpp,
-        int case0);
+        bool is_cpp);
     
     Token recall_subjust_type(
         std::deque<Token>::iterator t, 
