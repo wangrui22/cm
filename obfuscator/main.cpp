@@ -25,7 +25,7 @@ static int get_source_files(std::vector<std::string>& files) {
 static int get_ignore_file_name(std::vector<std::string>& files) {
     std::ifstream in("./ignore_file", std::ios::in);
     if (!in.is_open()) {
-        std::cerr << "open config ignore failed.\n";  
+        std::cerr << "open config ignore file failed.\n";  
         return -1;
     }
     std::string line;
@@ -43,7 +43,7 @@ static int get_ignore_file_name(std::vector<std::string>& files) {
 static int get_ignore_class_name(std::set<std::string>& names) {
     std::ifstream in("./ignore_class", std::ios::in);
     if (!in.is_open()) {
-        std::cerr << "open config ignore failed.\n";  
+        std::cerr << "open config ignore class failed.\n";  
         return -1;
     }
     std::string line;
@@ -61,7 +61,7 @@ static int get_ignore_class_name(std::set<std::string>& names) {
 static int get_ignore_function_name(std::set<std::string>& names) {
     std::ifstream in("./ignore_function", std::ios::in);
     if (!in.is_open()) {
-        std::cerr << "open config ignore failed.\n";  
+        std::cerr << "open config ignore function failed.\n";  
         return -1;
     }
     std::string line;
@@ -79,7 +79,7 @@ static int get_ignore_function_name(std::set<std::string>& names) {
 static int get_ignore_class_function_name(std::map<std::string,std::set<std::string>>& c_fn_names) {
     std::ifstream in("./ignore_class_function", std::ios::in);
     if (!in.is_open()) {
-        std::cerr << "open config ignore failed.\n";  
+        std::cerr << "open config ignore class function failed.\n";  
         return -1;
     }
     std::string line;
@@ -158,6 +158,7 @@ int main(int argc, char* argv[]) {
 
             std::set<std::string> post2;
             post2.insert(".cpp");
+            post2.insert(".cu");//这里加上cuda的支持
         
             Util::get_all_file_recursion(src_dir[j], post2,  c_file);
         }

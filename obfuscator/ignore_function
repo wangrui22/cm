@@ -1,2 +1,18 @@
+#C function overload
+min
+max
+fabs
+abs
+
 #in template call
 get_model
+
+#C export
+check_license
+has_license
+hello_test
+
+#Cuda math wrapper function
+normalize
+length
+cross

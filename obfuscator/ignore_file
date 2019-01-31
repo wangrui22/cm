@@ -1,5 +1,4 @@
 mi_json.h
 mi_cuda_math.h
-mi_cuda_graphic.h
 mi_message.pb.h
 mi_message.pb.cc

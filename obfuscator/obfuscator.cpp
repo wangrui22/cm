@@ -209,9 +209,9 @@ static inline void print_token(const Token& t, std::ostream& out) {
 }
 
 static inline bool is_source_file(const std::string& file_name) {
-    // return ( (file_name.size() > 4 && file_name.substr(file_name.size()-4, 4) == ".cpp") ||
-    //         (file_name.size() > 3 && file_name.substr(file_name.size()-3, 3) == ".cu") );
-    return file_name.size() > 4 && file_name.substr(file_name.size()-4, 4) == ".cpp";
+    //这里包含cuda的文件
+    return ( (file_name.size() > 4 && file_name.substr(file_name.size()-4, 4) == ".cpp") ||
+            (file_name.size() > 3 && file_name.substr(file_name.size()-3, 3) == ".cu") );
 }
 
 //------------------------------------------------------------------------------------------------------//
@@ -923,9 +923,7 @@ void Obfuscator::extract_class() {
         Lex& lex = *(*it);
         std::string file_name = _file_name[idx++];
         std::cout << "extract class in: " << file_name << std::endl;
-        if (file_name == "mi_sdf.cpp") {
-            std::cout << "gotit";
-        }
+
         std::deque<Token>& ts = lex._ts;
         std::deque<Scope> scopes;
         Scope root_scope;
@@ -1032,10 +1030,6 @@ void Obfuscator::extract_class() {
                 //typedef struct {
                 // ...    
                 //}
-
-                if ((t+2)->val == "AnnotationROIHandlerFactory") {
-                    std::cout << "gotit";
-                }
 
                 if ((t+1)->type == CPP_OPEN_BRACE) {
                     ++t;
@@ -1385,9 +1379,7 @@ void Obfuscator::extract_container() {
         Lex& lex = *(*it);
         std::string file_name = _file_name[idx++];
         std::cout << "extract container: " << file_name << std::endl;
-        if (file_name== "mi_device_store.cpp") {
-            std::cout << "gotit";
-        }
+        
         std::deque<Token>& ts = lex._ts;
         for (auto t = ts.begin(); t != ts.end(); ) {
             auto t_n = t+1;//::
@@ -1397,9 +1389,6 @@ void Obfuscator::extract_container() {
             if (t->val == ns && t_n != ts.end() && t_nn != ts.end() && t_nnn != ts.end() &&
                 t_n->type == CPP_SCOPE && std_container.find(t_nn->val) != std_container.end() && t_nnn->type == CPP_LESS) {
                 //找到std的源头, 第一个容器
-                if (t_nn->val == "map") {
-                    std::cout << "gotit";
-                }
                 std::stack<Token*> stt;//stack token type
                 std::stack<Token> st_scope; //<>
                 
@@ -2163,9 +2152,6 @@ void Obfuscator::extract_class_member() {
                 jump_brace(t, ts);
                 bool tm = false;
                 assert(is_in_class_struct(cur_c_name, tm));
-                if (cur_c_name == "InnerSocket") {
-                    std::cout << "gotit";
-                }
                 extract_class_member(cur_c_name, t_begin, t_begin, t, ts, tm);
             } else {
                 ++t;
@@ -2558,6 +2544,7 @@ void Obfuscator::extract_global_var_fn() {
                 }
                 if (get_fn_type) {
                     Function fn;
+                    t->type = CPP_FUNCTION;
                     fn.name = t->val;
                     fn.ret = *t_p;
                     fn.scope = *cur_scope;
@@ -2580,9 +2567,6 @@ void Obfuscator::extract_local_var_fn() {
     for (auto it = _lex.begin(); it != _lex.end(); ++it) {
         Lex& lex = *(*it);
         std::string file_name = _file_name[file_idx++];
-        if (file_name == "mi_db_server_main.cpp") {
-            std::cout <<"got";
-        }
         bool is_cpp = is_source_file(file_name);
         if (!is_cpp) {
             continue;
@@ -2602,7 +2586,6 @@ void Obfuscator::extract_local_var_fn() {
         _local_functions[file_name] = std::map<std::string, Function>();
         std::map<std::string, Function>& local_fn = _local_functions[file_name];
 
-        bool in_annoy = false;
         for (auto t = ts.begin(); t != ts.end(); ) {
             if (t->val=="namespace" &&
                 (t+1)!= ts.end() && (t+1)->type == CPP_NAME &&
@@ -2736,12 +2719,10 @@ void Obfuscator::extract_local_var_fn() {
                 (t-1)->val == "static" ||//函数修饰符
                 (t-1)->val == "const" ||//函数修饰符
                 (t-1)->val == "extern" ||//定义在其他文件中的局部函数
-                (in_annoy && (t-1)->type==CPP_OPEN_BRACE)) ) { //namespace {后的第一个方程
+                ((t-1)->val == "\"C\"" && (t-2)->val == "extern")  //extern "C"
+                 )) { //namespace {后的第一个方程
 
                 std::cout << "may variable: " << t_n->val << std::endl;
-                if (t_n->val == "calculate_raw_image_buffer") {
-                    std::cout << "got";
-                }
                 //有可能是全局变量  也有可能是类外的函数
                 if (t_nn->type == CPP_OPEN_PAREN && (t_nn+1)->val != "new") {//排除 A a(new A);的情况
                     //是类外的函数 
@@ -2752,9 +2733,12 @@ void Obfuscator::extract_local_var_fn() {
                     fn.name = t_n->val;
                     fn.ret = *t;
                     fn.scope = *cur_scope;
-                    local_fn[fn.name] = fn;
-                    if (fn.name == "get_disk_name") {
-                        std::cout<< "gotit";
+
+                    if ((t-1)->val == "\"C\"" && (t-2)->val == "extern") {
+                        //extern C 是导出的C风格的全局函数, 如果需要外面调用,则需要添加到ignore function中去
+                        _g_functions[fn.name] = fn;
+                    } else {
+                        local_fn[fn.name] = fn;
                     }
 
                     ++t;
@@ -2824,13 +2808,11 @@ void Obfuscator::extract_local_var_fn() {
                 }
                 if (get_fn_type) {
                     Function fn;
+                    t->type = CPP_FUNCTION;
                     fn.name = t->val;
                     fn.ret = *t_p;
                     fn.scope = *cur_scope;
                     local_fn[fn.name] = fn;
-                    if (fn.name == "get_disk_name") {
-                        std::cout<< "gotit";
-                    }
                     ++t;
                     jump_paren(t,ts);
                     ++t;
@@ -2919,9 +2901,6 @@ Token Obfuscator::recall_subjust_type(
     bool is_cpp) {
 
     const std::string v_name = t->val;
-    if (v_name == "col_spacing") {
-        std::cout <<"gotit";
-    }
 
     //类成员变量
     Token t_type;
@@ -3386,9 +3365,6 @@ Token Obfuscator::get_subject_type(
         //跳过找到CPP_OPEN_SQUARE
         auto t_r = t;
         jump_before_square(t_r, t_start);
-        if (t_r->val == "KEYS") {
-            std::cout << "got";
-        }
         Token tt = get_subject_type(t_r, t_start, class_name, file_name, paras, is_cpp);
         if (tt.type == CPP_OTHER) {
             return tt;
@@ -3491,9 +3467,6 @@ bool Obfuscator::is_call_in_module(std::deque<Token>::iterator t,
     fn_subject_type.type = CPP_OTHER;
 
     const std::string fn_name = t->val;
-    if (fn_name == "what") {
-        std::cout << "got";
-    }
     ///\ 1 查看是不是静态调用，如果是则返回false（之前已经将所有的类静态调用都设置成function了）
     if((t-1)->type == CPP_SCOPE) {
         std::cout << "static call with class: " << (t-2)->val << " not in module.\n";
@@ -3611,9 +3584,6 @@ void Obfuscator::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if(t->val == "run") {
-                std::cout << "gotit";
-            }
             Token subject_t;
             if ((t-1)->type == CPP_TYPE) {
                 std::cout << "may construct: " << (t-1)->type << " " << t->val << std::endl;
@@ -3714,9 +3684,7 @@ void Obfuscator::label_call()  {
         bool is_cpp = is_source_file(file_name);
 
         std::cout << "label file: " << file_name << std::endl;
-        if (file_name == "mi_ai_operation_change_ai_op_priority.cpp") {
-            std::cout << "gotit";
-        }
+
         std::deque<Token>& ts = lex._ts;        
 
         for (auto t = ts.begin(); t != ts.end(); ) {
@@ -3758,9 +3726,6 @@ void Obfuscator::label_call()  {
                 ++t;
 
                 std::cout << "label call in class fn: " << fn_name << std::endl;
-                if (fn_name == "check_dirty_camera_canvas") {
-                    std::cout << "gotit";
-                }
 
                 std::map<std::string, Token> paras = label_skip_paren(t,ts);
                 while(t->type != CPP_SEMICOLON && t->type != CPP_OPEN_BRACE) {
@@ -3775,6 +3740,7 @@ void Obfuscator::label_call()  {
 
                 //这个{就是回溯的终点限制
                 std::cout << "label " << class_name << "::" << fn_name << std::endl;
+
                 auto t_begin = t;
                 jump_brace(t, ts);
                 label_call_in_fn(t_begin, t_begin, t, class_name, file_name, paras, is_cpp, ts);
@@ -3800,14 +3766,14 @@ void Obfuscator::label_fn_as_para_in_fn(std::deque<Token>::iterator t,
         if (t->type == CPP_NAME && (t+1)->type != CPP_OPEN_PAREN) {//区别于函数调用
             std::cout << "may function : " << t->type << " as parameter\n";
             Token ret;
-            if (is_global_function(t->val,ret)) {
+            if (is_global_function(t->val,ret) && !is_ignore_function(t->val)) {
                 //函数作为参数,前面一点要有引号
                 //判断name是不是和函数名重名的类型
                 Token tt = get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);
                 if (tt.type == CPP_OTHER) {
                     t->type = CPP_CALL;
                 }
-            } else if (is_cpp && is_local_function(file_name, t->val , ret)) {
+            } else if (is_cpp && is_local_function(file_name, t->val , ret) && !is_ignore_function(t->val)) {
                 Token tt = get_subject_type(t, t_start, class_name, file_name, paras, is_cpp);
                 if (tt.type == CPP_OTHER) {
                     t->type = CPP_CALL;
@@ -3827,9 +3793,6 @@ void Obfuscator::label_fn_as_parameter() {
         bool is_cpp = is_source_file(file_name);
 
         std::cout << "label file: " << file_name << std::endl;
-        if (file_name == "mi_sql_filter.cpp") {
-            std::cout << "gotit";
-        }
         std::deque<Token>& ts = lex._ts;        
 
         for (auto t = ts.begin(); t != ts.end(); ) {
