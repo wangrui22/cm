@@ -13,3 +13,4 @@ CudaUtils::log_cuda_error
 #marco
 MySQLDB::try_connect
 MySQLDB::connect
+Redis::connect
