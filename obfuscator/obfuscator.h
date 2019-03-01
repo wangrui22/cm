@@ -182,6 +182,8 @@ private:
     std::map<std::string, Token> _typedef_map;//key scope::name
 
     //std::vector<Token> _g_typedefs;//typedef 类型, 仅仅将typedef之前的token记录下来
+
+    std::map<std::string, std::string> _map_replace;//map to find token old value, just record hash
 };
 
 #endif

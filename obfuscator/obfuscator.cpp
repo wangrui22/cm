@@ -3867,6 +3867,8 @@ void Obfuscator::replace_call(bool hash) {
     int file_idx=0;
     const std::string REPLACE = "_replace";
     const std::string RE_HEADER = "mi_";
+    _map_replace.clear();
+
     for (auto it = _lex.begin(); it != _lex.end(); ++it) {
         Lex& lex = *(*it);
         const std::string file_name = _file_name[file_idx];
@@ -3928,6 +3930,7 @@ void Obfuscator::replace_call(bool hash) {
                 last_loc = loc;
                 std::string v_old = t->val;
                 std::string v_new = RE_HEADER + Util::hash(v_old);
+                _map_replace[v_old] = v_new;
                 //先删除
                 code.replace(loc+loc_sum-1, len, v_new);
                 loc_sum += v_new.size() - v_old.size(); 
@@ -4244,6 +4247,20 @@ void Obfuscator::debug(const std::string& debug_out) {
                 print_token(it2->second.ret, out);
                 out << " \n"; 
             }
+        }
+        out.close();
+    }
+
+    //print replace map
+    {
+        const std::string f = debug_out+"/replace_map";
+        std::ofstream out(f, std::ios::out);
+        if (!out.is_open()) {
+            std::cerr << "err to open: " << f << "\n";
+            return;
+        }
+        for (auto it = _map_replace.begin(); it != _map_replace.end(); ++it) {
+            out << it->first << "\t" << it->second << std::endl;
         }
         out.close();
     }
