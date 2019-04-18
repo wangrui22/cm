@@ -49,7 +49,7 @@ static inline void jump_angle_brace(std::deque<Token>::iterator& t, const std::d
     }
 }
 
-static inline void jump_angle_brace(std::deque<Token>::iterator& t, std::deque<Token>::iterator t_end) {
+static inline int jump_angle_brace(std::deque<Token>::iterator& t, std::deque<Token>::iterator t_end) {
     assert(t->type == CPP_LESS);
     std::stack<Token> ss;
     ss.push(*t);
@@ -65,10 +65,14 @@ static inline void jump_angle_brace(std::deque<Token>::iterator& t, std::deque<T
                 continue;
             }
             ++t;
+        } else if (t->type == CPP_SEMICOLON) {
+            return -1;
         } else {
             ++t;
         }
     }
+
+    return 0;
 }
 
 static inline void jump_square(std::deque<Token>::iterator& t) {
@@ -3584,6 +3588,9 @@ void Obfuscator::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
+            if (t->val == "x") {
+                std::cout << "got it 2";
+            }
             Token subject_t;
             if ((t-1)->type == CPP_TYPE) {
                 std::cout << "may construct: " << (t-1)->type << " " << t->val << std::endl;
@@ -3597,9 +3604,16 @@ void Obfuscator::label_call_in_fn(std::deque<Token>::iterator t,
             }
         } else if (t->type == CPP_NAME && t_n<=t_end && t_n->type == CPP_LESS) {
             //模板函数调用
+            
+            
             auto t_r = t;
             ++t_r;
-            jump_angle_brace(t_r, t_end);
+            if(0 != jump_angle_brace(t_r, t_end)) {
+                //是小于号
+                ++t;
+                continue;
+            }
+            
             ++t_r;
             if (t_r->type == CPP_OPEN_PAREN) {
                 std::cout << "may call template fn : " << t->val << std::endl;
@@ -3684,6 +3698,9 @@ void Obfuscator::label_call()  {
         bool is_cpp = is_source_file(file_name);
 
         std::cout << "label file: " << file_name << std::endl;
+        if (file_name == "mi_be_operation_fe_app_init_bone_tumor.cpp") {
+            std::cout << "got it";
+        }
 
         std::deque<Token>& ts = lex._ts;        
 
