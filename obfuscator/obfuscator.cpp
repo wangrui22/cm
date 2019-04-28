@@ -2926,7 +2926,7 @@ Token Obfuscator::recall_subjust_type(
             //可能是复制构造 如 type a =
             
             //过滤掉 type[*&]
-            while((t_p->type == CPP_MULT || t_p->type == CPP_AND) && t_p<=t_start) {
+            while((t_p->type == CPP_MULT || t_p->type == CPP_AND) && t_p>=t_start) {
                 --t_p;
             }
 
@@ -3588,7 +3588,7 @@ void Obfuscator::label_call_in_fn(std::deque<Token>::iterator t,
         auto t_n = t+1;
         if (t->type == CPP_NAME && t_n <= t_end && t_n->type == CPP_OPEN_PAREN) {
             std::cout << "may call: " << t->val << std::endl;
-            if (t->val == "x") {
+            if (t->val == "set_id") {
                 std::cout << "got it 2";
             }
             Token subject_t;
